@@ -79,13 +79,26 @@ const Index = () => {
           )}
         </section>
 
+        {/* Flowing Images Section */}
+        <section className="mb-16 overflow-hidden relative h-20 bg-gradient-to-r from-background via-accent to-background">
+          <div className="absolute inset-0 flex items-center">
+            <div className="image-flow flex space-x-8 opacity-70">
+              <img src={officeBuilding} alt="オフィス" className="h-12 w-16 object-cover rounded" />
+              <img src={businessTeam} alt="チーム" className="h-12 w-16 object-cover rounded" />
+              <img src={workspace} alt="ワークスペース" className="h-12 w-16 object-cover rounded" />
+              <img src={officeBuilding} alt="オフィス" className="h-12 w-16 object-cover rounded" />
+              <img src={businessTeam} alt="チーム" className="h-12 w-16 object-cover rounded" />
+            </div>
+          </div>
+        </section>
+
         {/* Business Features Section */}
         <section className="grid md:grid-cols-3 gap-8 mb-16">
           <div className="text-center">
             <img 
               src={officeBuilding} 
               alt="モダンなオフィスビル" 
-              className="w-full h-48 object-cover rounded-lg mb-4 shadow-card"
+              className="w-full h-48 object-cover rounded-lg mb-4 shadow-card hover:shadow-elevated transition-shadow duration-300"
             />
             <h3 className="text-xl font-semibold mb-2">優良企業多数</h3>
             <p className="text-muted-foreground">信頼できる企業の求人を厳選してご紹介</p>
@@ -94,7 +107,7 @@ const Index = () => {
             <img 
               src={businessTeam} 
               alt="チームワークを大切にする職場環境" 
-              className="w-full h-48 object-cover rounded-lg mb-4 shadow-card"
+              className="w-full h-48 object-cover rounded-lg mb-4 shadow-card hover:shadow-elevated transition-shadow duration-300"
             />
             <h3 className="text-xl font-semibold mb-2">充実したサポート</h3>
             <p className="text-muted-foreground">転職活動から入社まで専任スタッフがサポート</p>
@@ -103,7 +116,7 @@ const Index = () => {
             <img 
               src={workspace} 
               alt="快適なワークスペース環境" 
-              className="w-full h-48 object-cover rounded-lg mb-4 shadow-card"
+              className="w-full h-48 object-cover rounded-lg mb-4 shadow-card hover:shadow-elevated transition-shadow duration-300"
             />
             <h3 className="text-xl font-semibold mb-2">理想の職場環境</h3>
             <p className="text-muted-foreground">あなたに最適な働き方が見つかります</p>

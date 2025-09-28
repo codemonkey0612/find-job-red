@@ -79,3 +79,49 @@
     @apply bg-background text-foreground;
   }
 }
+
+@layer components {
+  /* Click animation for interactive elements */
+  .click-animate {
+    @apply transition-all duration-200 ease-in-out;
+  }
+  
+  .click-animate:active {
+    @apply scale-95 ring-2 ring-primary ring-opacity-50;
+  }
+  
+  /* Flowing images animation */
+  .image-flow {
+    animation: flow-left-right 20s linear infinite;
+  }
+  
+  @keyframes flow-left-right {
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(100vw);
+    }
+  }
+  
+  /* Enhanced border animations */
+  .border-animate {
+    @apply relative overflow-hidden transition-all duration-300;
+  }
+  
+  .border-animate::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, hsl(var(--primary)), transparent);
+    transition: left 0.5s ease-in-out;
+  }
+  
+  .border-animate:focus::before,
+  .border-animate:focus-within::before {
+    left: 100%;
+  }
+}

@@ -34,7 +34,7 @@ export const JobSearchForm = ({ onSearch }: JobSearchFormProps) => {
               勤務地
             </label>
             <Select value={location} onValueChange={setLocation}>
-              <SelectTrigger>
+              <SelectTrigger className="border-animate click-animate">
                 <SelectValue placeholder="勤務地を選択" />
               </SelectTrigger>
               <SelectContent>
@@ -52,7 +52,7 @@ export const JobSearchForm = ({ onSearch }: JobSearchFormProps) => {
               職種
             </label>
             <Select value={jobType} onValueChange={setJobType}>
-              <SelectTrigger>
+              <SelectTrigger className="border-animate click-animate">
                 <SelectValue placeholder="職種を選択" />
               </SelectTrigger>
               <SelectContent>
@@ -70,7 +70,7 @@ export const JobSearchForm = ({ onSearch }: JobSearchFormProps) => {
               はたらき方
             </label>
             <Select value={workStyle} onValueChange={setWorkStyle}>
-              <SelectTrigger>
+              <SelectTrigger className="border-animate click-animate">
                 <SelectValue placeholder="はたらき方を選択" />
               </SelectTrigger>
               <SelectContent>
@@ -91,13 +91,13 @@ export const JobSearchForm = ({ onSearch }: JobSearchFormProps) => {
               placeholder="職種、勤務地など"
               value={keyword}
               onChange={(e) => setKeyword(e.target.value)}
-              className="w-full"
+              className="w-full border-animate click-animate"
             />
           </div>
         </div>
         
         <div className="flex justify-center">
-          <Button type="submit" className="w-full md:w-auto px-8 py-2 bg-primary text-primary-foreground hover:bg-primary/90">
+          <Button type="submit" className="w-full md:w-auto px-8 py-2 bg-primary text-primary-foreground hover:bg-primary/90 click-animate">
             <Search className="w-4 h-4 mr-2" />
             検索
           </Button>
