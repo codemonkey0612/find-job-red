@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Header } from "@/components/Header";
 import { JobSearchForm } from "@/components/JobSearchForm";
 import { JobListingSection } from "@/components/JobListingSection";
 import { sampleJobs, featuredJobs, recommendedJobs } from "@/data/sampleJobs";
@@ -53,10 +52,8 @@ const Index = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <Header />
-      
-      <main className="container mx-auto px-4 py-8">
+    <div className="bg-background">
+      <div className="container mx-auto px-4 py-8">
         {/* Hero Section with Search */}
         <section className="text-center mb-12">
           <div className="bg-gradient-hero text-white py-16 px-6 rounded-lg mb-8">
@@ -143,52 +140,7 @@ const Index = () => {
             />
           </>
         )}
-      </main>
-      
-      <footer className="bg-secondary py-12 mt-16">
-        <div className="container mx-auto px-4">
-          <div className="grid md:grid-cols-4 gap-8 mb-8">
-            <div>
-              <h4 className="font-semibold text-lg mb-4">Bizresearch</h4>
-              <p className="text-muted-foreground text-sm">
-                理想の仕事探しをサポートする求人サイトです。あなたにぴったりの職場を見つけましょう。
-              </p>
-            </div>
-            <div>
-              <h5 className="font-semibold mb-4">求人情報</h5>
-              <ul className="space-y-2 text-sm text-muted-foreground">
-                <li><a href="#" className="hover:text-primary transition-colors">正社員求人</a></li>
-                <li><a href="#" className="hover:text-primary transition-colors">契約社員求人</a></li>
-                <li><a href="#" className="hover:text-primary transition-colors">パート・アルバイト</a></li>
-                <li><a href="#" className="hover:text-primary transition-colors">派遣社員求人</a></li>
-              </ul>
-            </div>
-            <div>
-              <h5 className="font-semibold mb-4">エリア別求人</h5>
-              <ul className="space-y-2 text-sm text-muted-foreground">
-                <li><a href="#" className="hover:text-primary transition-colors">東京都の求人</a></li>
-                <li><a href="#" className="hover:text-primary transition-colors">大阪府の求人</a></li>
-                <li><a href="#" className="hover:text-primary transition-colors">神奈川県の求人</a></li>
-                <li><a href="#" className="hover:text-primary transition-colors">愛知県の求人</a></li>
-              </ul>
-            </div>
-            <div>
-              <h5 className="font-semibold mb-4">サポート</h5>
-              <ul className="space-y-2 text-sm text-muted-foreground">
-                <li><a href="#" className="hover:text-primary transition-colors">利用規約</a></li>
-                <li><a href="#" className="hover:text-primary transition-colors">プライバシーポリシー</a></li>
-                <li><a href="#" className="hover:text-primary transition-colors">お問い合わせ</a></li>
-                <li><a href="#" className="hover:text-primary transition-colors">よくある質問</a></li>
-              </ul>
-            </div>
-          </div>
-          <div className="border-t border-border pt-8 text-center">
-            <p className="text-muted-foreground text-sm">
-              © 2024 Bizresearch. All rights reserved.
-            </p>
-          </div>
-        </div>
-      </footer>
+      </div>
     </div>
   );
 };

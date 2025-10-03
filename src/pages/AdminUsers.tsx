@@ -1,0 +1,299 @@
+import React, { useState, useEffect } from 'react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { 
+  Users, 
+  Search, 
+  Filter, 
+  MoreHorizontal,
+  UserCheck,
+  UserX,
+  Mail,
+  Calendar,
+  Shield,
+  Building2
+} from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+
+interface User {
+  id: number;
+  name: string;
+  email: string;
+  role: 'user' | 'admin' | 'employer';
+  email_verified: boolean;
+  created_at: string;
+  last_login?: string;
+  job_count?: number;
+  application_count?: number;
+}
+
+const AdminUsers: React.FC = () => {
+  const [users, setUsers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [roleFilter, setRoleFilter] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+
+  useEffect(() => {
+    // Mock data for now - replace with actual API calls
+    const mockUsers: User[] = [
+      {
+        id: 1,
+        name: '田中太郎',
+        email: 'tanaka@example.com',
+        role: 'user',
+        email_verified: true,
+        created_at: '2024-01-15',
+        last_login: '2024-01-20',
+        application_count: 5
+      },
+      {
+        id: 2,
+        name: '佐藤花子',
+        email: 'sato@example.com',
+        role: 'employer',
+        email_verified: true,
+        created_at: '2024-01-14',
+        last_login: '2024-01-19',
+        job_count: 3
+      },
+      {
+        id: 3,
+        name: '山田次郎',
+        email: 'yamada@example.com',
+        role: 'user',
+        email_verified: false,
+        created_at: '2024-01-13',
+        application_count: 2
+      },
+      {
+        id: 4,
+        name: '管理者',
+        email: 'admin@bizresearch.com',
+        role: 'admin',
+        email_verified: true,
+        created_at: '2024-01-01',
+        last_login: '2024-01-20'
+      }
+    ];
+
+    setTimeout(() => {
+      setUsers(mockUsers);
+      setLoading(false);
+    }, 1000);
+  }, []);
+
+  const filteredUsers = users.filter(user => {
+    const matchesSearch = user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         user.email.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesRole = roleFilter === 'all' || user.role === roleFilter;
+    const matchesStatus = statusFilter === 'all' || 
+                         (statusFilter === 'verified' && user.email_verified) ||
+                         (statusFilter === 'unverified' && !user.email_verified);
+    
+    return matchesSearch && matchesRole && matchesStatus;
+  });
+
+  const handleUserAction = (action: string, userId: number) => {
+    console.log(`${action} user ${userId}`);
+    // Implement user actions here
+  };
+
+  const getRoleBadgeVariant = (role: string) => {
+    switch (role) {
+      case 'admin': return 'destructive';
+      case 'employer': return 'default';
+      case 'user': return 'secondary';
+      default: return 'outline';
+    }
+  };
+
+  const getRoleLabel = (role: string) => {
+    switch (role) {
+      case 'admin': return '管理者';
+      case 'employer': return '企業';
+      case 'user': return '求職者';
+      default: return role;
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <div className="flex items-center justify-center h-64">
+          <div className="text-lg">読み込み中...</div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="container mx-auto px-4 py-8">
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-gray-900 mb-2">ユーザー管理</h1>
+        <p className="text-gray-600">システム内の全ユーザーを管理</p>
+      </div>
+
+      {/* 検索・フィルター */}
+      <Card className="mb-6">
+        <CardContent className="pt-6">
+          <div className="flex flex-col md:flex-row gap-4">
+            <div className="flex-1">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                <Input
+                  placeholder="ユーザー名またはメールアドレスで検索..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Select value={roleFilter} onValueChange={setRoleFilter}>
+                <SelectTrigger className="w-32">
+                  <SelectValue placeholder="ロール" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">すべて</SelectItem>
+                  <SelectItem value="user">求職者</SelectItem>
+                  <SelectItem value="employer">企業</SelectItem>
+                  <SelectItem value="admin">管理者</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-32">
+                  <SelectValue placeholder="ステータス" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">すべて</SelectItem>
+                  <SelectItem value="verified">認証済み</SelectItem>
+                  <SelectItem value="unverified">未認証</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ユーザー一覧 */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center">
+            <Users className="h-5 w-5 mr-2" />
+            ユーザー一覧 ({filteredUsers.length}件)
+          </CardTitle>
+          <CardDescription>
+            システムに登録されている全ユーザー
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {filteredUsers.map((user) => (
+              <div key={user.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50">
+                <div className="flex items-center space-x-4">
+                  <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                    {user.role === 'admin' ? (
+                      <Shield className="h-5 w-5 text-red-600" />
+                    ) : user.role === 'employer' ? (
+                      <Building2 className="h-5 w-5 text-blue-600" />
+                    ) : (
+                      <UserCheck className="h-5 w-5 text-green-600" />
+                    )}
+                  </div>
+                  <div>
+                    <div className="flex items-center space-x-2">
+                      <h3 className="font-medium">{user.name}</h3>
+                      {user.email_verified ? (
+                        <Badge variant="default" className="text-xs">認証済み</Badge>
+                      ) : (
+                        <Badge variant="secondary" className="text-xs">未認証</Badge>
+                      )}
+                    </div>
+                    <p className="text-sm text-gray-500">{user.email}</p>
+                    <div className="flex items-center space-x-4 text-xs text-gray-400 mt-1">
+                      <span className="flex items-center">
+                        <Calendar className="h-3 w-3 mr-1" />
+                        登録: {new Date(user.created_at).toLocaleDateString('ja-JP')}
+                      </span>
+                      {user.last_login && (
+                        <span className="flex items-center">
+                          <Mail className="h-3 w-3 mr-1" />
+                          最終ログイン: {new Date(user.last_login).toLocaleDateString('ja-JP')}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="flex items-center space-x-3">
+                  <Badge variant={getRoleBadgeVariant(user.role)}>
+                    {getRoleLabel(user.role)}
+                  </Badge>
+                  
+                  {user.job_count !== undefined && (
+                    <span className="text-sm text-gray-500">
+                      求人: {user.job_count}件
+                    </span>
+                  )}
+                  
+                  {user.application_count !== undefined && (
+                    <span className="text-sm text-gray-500">
+                      応募: {user.application_count}件
+                    </span>
+                  )}
+                  
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="sm">
+                        <MoreHorizontal className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => handleUserAction('view', user.id)}>
+                        詳細を見る
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleUserAction('edit', user.id)}>
+                        編集
+                      </DropdownMenuItem>
+                      {user.role !== 'admin' && (
+                        <>
+                          <DropdownMenuItem onClick={() => handleUserAction('verify', user.id)}>
+                            {user.email_verified ? '認証を取り消す' : '認証する'}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem 
+                            onClick={() => handleUserAction('delete', user.id)}
+                            className="text-red-600"
+                          >
+                            削除
+                          </DropdownMenuItem>
+                        </>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              </div>
+            ))}
+            
+            {filteredUsers.length === 0 && (
+              <div className="text-center py-12">
+                <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                <p className="text-gray-500">条件に一致するユーザーが見つかりませんでした</p>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+};
+
+export default AdminUsers;

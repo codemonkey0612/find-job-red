@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { MapPin, Clock, DollarSign } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 interface JobCardProps {
   id: string;
@@ -17,6 +18,7 @@ interface JobCardProps {
 }
 
 export const JobCard = ({
+  id,
   title,
   company,
   location,
@@ -27,6 +29,11 @@ export const JobCard = ({
   tags,
   featured = false
 }: JobCardProps) => {
+  const navigate = useNavigate();
+
+  const handleViewDetails = () => {
+    navigate(`/jobs/${id}`);
+  };
   return (
     <Card className={`bg-gradient-card shadow-card hover:shadow-elevated transition-all duration-300 ${
       featured ? 'ring-2 ring-primary shadow-red' : ''
@@ -78,10 +85,11 @@ export const JobCard = ({
       </CardContent>
       
       <CardFooter className="px-6 pb-6 pt-0">
-        <Button className="w-full" variant="outline">
+        <Button className="w-full" variant="outline" onClick={handleViewDetails}>
           詳細を見る
         </Button>
       </CardFooter>
     </Card>
   );
 };
+

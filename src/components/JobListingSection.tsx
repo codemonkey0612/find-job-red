@@ -47,3 +47,6 @@ export const JobListingSection = ({ title, jobs, showAll = false }: JobListingSe
     </section>
   );
 };
+
+
+export default JobListingSection;
