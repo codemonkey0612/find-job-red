@@ -1,9 +1,9 @@
 import express from 'express';
 import { body, query, validationResult } from 'express-validator';
-import { authenticateToken, optionalAuth, requireRole } from '../middleware/auth';
-import type { AuthRequest } from '../middleware/auth';
-import { dbManager } from '../database/schema';
-import type { Job } from '../database/schema';
+import { authenticateToken, optionalAuth, requireRole } from '../middleware/auth.js';
+import type { AuthRequest } from '../middleware/auth.js';
+import { dbManager } from '../database/schema.js';
+import type { Job } from '../database/schema.js';
 
 const router = express.Router();
 
