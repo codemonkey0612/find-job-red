@@ -4,7 +4,7 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
 import { dbManager } from './database/schema.js';
-import authRoutes from './routes/auth';
+import authRoutes from './routes/auth.js';
 import jobRoutes from './routes/jobs.js';
 import adminRoutes from './routes/admin.js';
 // Simple Swagger setup without complex imports
