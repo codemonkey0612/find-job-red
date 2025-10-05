@@ -1,4 +1,6 @@
+import { useState } from "react";
 import { JobCard } from "./JobCard";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface Job {
   id: string;
@@ -17,23 +19,44 @@ interface JobListingSectionProps {
   title: string;
   jobs: Job[];
   showAll?: boolean;
-  limit?: number;
+  defaultDisplayCount?: number;
 }
 
-export const JobListingSection = ({ title, jobs, showAll = false, limit }: JobListingSectionProps) => {
-  // limitが指定されている場合はそれを優先、なければshowAllに基づいて決定
-  const displayCount = limit !== undefined ? limit : (showAll ? jobs.length : 6);
-  const displayJobs = jobs.slice(0, displayCount);
+export const JobListingSection = ({ title, jobs, showAll = false, defaultDisplayCount = 6 }: JobListingSectionProps) => {
+  const [displayCount, setDisplayCount] = useState(defaultDisplayCount);
+  const displayJobs = showAll ? jobs : jobs.slice(0, displayCount);
   
   return (
     <section className="mb-12">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
         <h2 className="text-2xl font-bold text-foreground">{title}</h2>
-        {!showAll && jobs.length > displayCount && (
-          <button className="text-primary hover:text-primary/80 font-medium">
-            すべて見る ({jobs.length}件)
-          </button>
-        )}
+        <div className="flex items-center gap-4">
+          {!showAll && (
+            <div className="flex items-center gap-2">
+              <label className="text-sm text-muted-foreground">表示件数:</label>
+              <Select value={displayCount.toString()} onValueChange={(value) => setDisplayCount(Number(value))}>
+                <SelectTrigger className="w-24">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="6">6件</SelectItem>
+                  <SelectItem value="12">12件</SelectItem>
+                  <SelectItem value="18">18件</SelectItem>
+                  <SelectItem value="24">24件</SelectItem>
+                  <SelectItem value={jobs.length.toString()}>すべて</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          {!showAll && jobs.length > displayCount && (
+            <button 
+              onClick={() => setDisplayCount(jobs.length)}
+              className="text-primary hover:text-primary/80 font-medium text-sm"
+            >
+              すべて見る ({jobs.length}件)
+            </button>
+          )}
+        </div>
       </div>
       
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

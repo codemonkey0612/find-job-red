@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { JobSearchForm } from "@/components/JobSearchForm";
 import { JobListingSection } from "@/components/JobListingSection";
 import { sampleJobs, featuredJobs, recommendedJobs } from "@/data/sampleJobs";
@@ -9,18 +9,16 @@ import workspace from "@/assets/workspace.jpg";
 const Index = () => {
   const [searchResults, setSearchResults] = useState(sampleJobs);
   const [resultCount, setResultCount] = useState(sampleJobs.length);
-  const [previewCount, setPreviewCount] = useState(sampleJobs.length);
-  const [displayLimit, setDisplayLimit] = useState(20);
-  const [hasSearched, setHasSearched] = useState(false);
+  const [previewCount, setPreviewCount] = useState<number | undefined>(undefined);
+  const [isSearched, setIsSearched] = useState(false);
 
-  // フィルタリング用の関数
-  const filterJobs = (params: {
+  // 検索フィルタリングロジックを共通化
+  const filterJobs = useCallback((params: {
     keyword: string;
     location: string;
     jobType: string;
     workStyle: string;
   }) => {
-    // Simple search simulation - in real app, this would be an API call
     let filtered = sampleJobs;
     
     if (params.keyword) {
@@ -52,10 +50,10 @@ const Index = () => {
     }
     
     return filtered;
-  };
+  }, []);
 
-  // リアルタイム検索件数更新用
-  const handleFilterChange = (params: {
+  // 検索パラメータ変更時のリアルタイム件数プレビュー
+  const handleParamsChange = useCallback((params: {
     keyword: string;
     location: string;
     jobType: string;
@@ -63,10 +61,10 @@ const Index = () => {
   }) => {
     const filtered = filterJobs(params);
     setPreviewCount(filtered.length);
-  };
+  }, [filterJobs]);
 
-  // 実際の検索実行
-  const handleSearch = (params: {
+  // 検索実行
+  const handleSearch = useCallback((params: {
     keyword: string;
     location: string;
     jobType: string;
@@ -75,8 +73,9 @@ const Index = () => {
     const filtered = filterJobs(params);
     setSearchResults(filtered);
     setResultCount(filtered.length);
-    setHasSearched(true);
-  };
+    setIsSearched(true);
+    setPreviewCount(undefined);
+  }, [filterJobs]);
 
   return (
     <div className="bg-background">
@@ -93,12 +92,18 @@ const Index = () => {
           </div>
           
           <JobSearchForm 
-            onSearch={handleSearch} 
-            onFilterChange={handleFilterChange}
+            onSearch={handleSearch}
+            onParamsChange={handleParamsChange}
             resultCount={previewCount}
-            limit={displayLimit}
-            onLimitChange={setDisplayLimit}
           />
+          
+          {isSearched && (
+            <div className="text-center mb-6">
+              <p className="text-lg text-muted-foreground">
+                検索結果: <span className="font-semibold text-primary">{resultCount}件</span>の求人が見つかりました
+              </p>
+            </div>
+          )}
         </section>
 
         {/* Flowing Images Section */}
@@ -146,31 +151,22 @@ const Index = () => {
         </section>
 
         {/* Search Results or Default Sections */}
-        {hasSearched ? (
-          <>
-            <div className="text-center mb-6">
-              <p className="text-lg text-muted-foreground">
-                検索結果: <span className="font-semibold text-primary">{resultCount}件</span>の求人が見つかりました
-              </p>
-            </div>
-            <JobListingSection
-              title="検索結果"
-              jobs={searchResults}
-              limit={displayLimit}
-            />
-          </>
+        {isSearched ? (
+          <JobListingSection
+            title="検索結果"
+            jobs={searchResults}
+            showAll={true}
+          />
         ) : (
           <>
             <JobListingSection
               title="あなたにおすすめの仕事"
               jobs={recommendedJobs}
-              limit={displayLimit}
             />
             
             <JobListingSection
               title="注目の仕事"
               jobs={featuredJobs}
-              limit={displayLimit}
             />
           </>
         )}

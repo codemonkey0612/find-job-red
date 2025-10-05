@@ -11,33 +11,25 @@ interface JobSearchFormProps {
     jobType: string;
     workStyle: string;
   }) => void;
-  onFilterChange?: (params: {
+  onParamsChange?: (params: {
     keyword: string;
     location: string;
     jobType: string;
     workStyle: string;
   }) => void;
   resultCount?: number;
-  limit?: number;
-  onLimitChange?: (limit: number) => void;
 }
 
-export const JobSearchForm = ({ 
-  onSearch, 
-  onFilterChange,
-  resultCount = 0,
-  limit = 20,
-  onLimitChange
-}: JobSearchFormProps) => {
+export const JobSearchForm = ({ onSearch, onParamsChange, resultCount }: JobSearchFormProps) => {
   const [keyword, setKeyword] = useState("");
   const [location, setLocation] = useState("");
   const [jobType, setJobType] = useState("");
   const [workStyle, setWorkStyle] = useState("");
 
-  // リアルタイム検索件数の更新
+  // 検索パラメータが変更されたら親コンポーネントに通知
   useEffect(() => {
-    onFilterChange?.({ keyword, location, jobType, workStyle });
-  }, [keyword, location, jobType, workStyle, onFilterChange]);
+    onParamsChange?.({ keyword, location, jobType, workStyle });
+  }, [keyword, location, jobType, workStyle, onParamsChange]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,14 +38,7 @@ export const JobSearchForm = ({
 
   return (
     <div className="bg-background shadow-card rounded-lg p-6 mb-8">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xl font-semibold text-foreground">お仕事探し</h2>
-        {resultCount !== undefined && (
-          <div className="text-sm text-muted-foreground">
-            該当件数: <span className="font-bold text-primary text-lg">{resultCount}</span>件
-          </div>
-        )}
-      </div>
+      <h2 className="text-xl font-semibold text-foreground mb-4">お仕事探し</h2>
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <div>
@@ -123,27 +108,15 @@ export const JobSearchForm = ({
           </div>
         </div>
         
-        <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-          <div className="flex items-center gap-2">
-            <label className="text-sm font-medium text-foreground whitespace-nowrap">
-              表示件数:
-            </label>
-            <Select 
-              value={limit.toString()} 
-              onValueChange={(value) => onLimitChange?.(parseInt(value))}
-            >
-              <SelectTrigger className="w-24 border-animate">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="10">10件</SelectItem>
-                <SelectItem value="20">20件</SelectItem>
-                <SelectItem value="50">50件</SelectItem>
-                <SelectItem value="100">100件</SelectItem>
-              </SelectContent>
-            </Select>
+        {resultCount !== undefined && (
+          <div className="text-center py-2">
+            <p className="text-sm text-muted-foreground">
+              該当する求人: <span className="font-semibold text-primary">{resultCount}件</span>
+            </p>
           </div>
-          
+        )}
+        
+        <div className="flex justify-center">
           <Button type="submit" className="w-full md:w-auto px-8 py-2 bg-primary text-primary-foreground hover:bg-primary/90 click-animate">
             <Search className="w-4 h-4 mr-2" />
             検索
