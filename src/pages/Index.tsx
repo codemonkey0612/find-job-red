@@ -9,8 +9,12 @@ import workspace from "@/assets/workspace.jpg";
 const Index = () => {
   const [searchResults, setSearchResults] = useState(sampleJobs);
   const [resultCount, setResultCount] = useState(sampleJobs.length);
+  const [previewCount, setPreviewCount] = useState(sampleJobs.length);
+  const [displayLimit, setDisplayLimit] = useState(20);
+  const [hasSearched, setHasSearched] = useState(false);
 
-  const handleSearch = (params: {
+  // フィルタリング用の関数
+  const filterJobs = (params: {
     keyword: string;
     location: string;
     jobType: string;
@@ -47,8 +51,31 @@ const Index = () => {
       });
     }
     
+    return filtered;
+  };
+
+  // リアルタイム検索件数更新用
+  const handleFilterChange = (params: {
+    keyword: string;
+    location: string;
+    jobType: string;
+    workStyle: string;
+  }) => {
+    const filtered = filterJobs(params);
+    setPreviewCount(filtered.length);
+  };
+
+  // 実際の検索実行
+  const handleSearch = (params: {
+    keyword: string;
+    location: string;
+    jobType: string;
+    workStyle: string;
+  }) => {
+    const filtered = filterJobs(params);
     setSearchResults(filtered);
     setResultCount(filtered.length);
+    setHasSearched(true);
   };
 
   return (
@@ -65,15 +92,13 @@ const Index = () => {
             </p>
           </div>
           
-          <JobSearchForm onSearch={handleSearch} />
-          
-          {searchResults !== sampleJobs && (
-            <div className="text-center mb-6">
-              <p className="text-lg text-muted-foreground">
-                検索結果: <span className="font-semibold text-primary">{resultCount}件</span>の求人が見つかりました
-              </p>
-            </div>
-          )}
+          <JobSearchForm 
+            onSearch={handleSearch} 
+            onFilterChange={handleFilterChange}
+            resultCount={previewCount}
+            limit={displayLimit}
+            onLimitChange={setDisplayLimit}
+          />
         </section>
 
         {/* Flowing Images Section */}
@@ -121,22 +146,31 @@ const Index = () => {
         </section>
 
         {/* Search Results or Default Sections */}
-        {searchResults !== sampleJobs ? (
-          <JobListingSection
-            title="検索結果"
-            jobs={searchResults}
-            showAll={true}
-          />
+        {hasSearched ? (
+          <>
+            <div className="text-center mb-6">
+              <p className="text-lg text-muted-foreground">
+                検索結果: <span className="font-semibold text-primary">{resultCount}件</span>の求人が見つかりました
+              </p>
+            </div>
+            <JobListingSection
+              title="検索結果"
+              jobs={searchResults}
+              limit={displayLimit}
+            />
+          </>
         ) : (
           <>
             <JobListingSection
               title="あなたにおすすめの仕事"
               jobs={recommendedJobs}
+              limit={displayLimit}
             />
             
             <JobListingSection
               title="注目の仕事"
               jobs={featuredJobs}
+              limit={displayLimit}
             />
           </>
         )}
