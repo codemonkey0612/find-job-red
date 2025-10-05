@@ -36,7 +36,6 @@ export const JobListingSection = ({ title, jobs, showAll = false, defaultDisplay
               <label className="text-sm text-muted-foreground">表示件数:</label>
               <Select value={displayCount.toString()} onValueChange={(value) => setDisplayCount(Number(value))}>
                 <SelectTrigger className="w-24">
-                  <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="6">6件</SelectItem>
@@ -57,13 +56,6 @@ export const JobListingSection = ({ title, jobs, showAll = false, defaultDisplay
             </button>
           )}
         </div>
-      </div>
-      
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {displayJobs.map((job) => (
-          <JobCard key={job.id} {...job} />
-        ))}
-      </div>
       
       {displayJobs.length === 0 && (
         <div className="text-center py-12">
