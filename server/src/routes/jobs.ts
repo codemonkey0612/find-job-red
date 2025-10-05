@@ -261,8 +261,8 @@ router.get('/:id', optionalAuth, async (req: express.Request, res: express.Respo
   }
 });
 
-// Create new job (employers only)
-router.post('/', authenticateToken, requireRole(['employer', 'admin']), [
+// Create new job (admin only)
+router.post('/', authenticateToken, requireRole(['admin']), [
   body('title').trim().isLength({ min: 3 }).withMessage('Title must be at least 3 characters'),
   body('company').trim().isLength({ min: 2 }).withMessage('Company must be at least 2 characters'),
   body('location').trim().notEmpty().withMessage('Location is required'),
@@ -329,8 +329,8 @@ router.post('/', authenticateToken, requireRole(['employer', 'admin']), [
   }
 });
 
-// Update job (employers only)
-router.put('/:id', authenticateToken, requireRole(['employer', 'admin']), [
+// Update job (admin only)
+router.put('/:id', authenticateToken, requireRole(['admin']), [
   body('title').optional().trim().isLength({ min: 3 }),
   body('company').optional().trim().isLength({ min: 2 }),
   body('location').optional().trim().notEmpty(),
@@ -420,8 +420,8 @@ router.put('/:id', authenticateToken, requireRole(['employer', 'admin']), [
   }
 });
 
-// Delete job (employers only)
-router.delete('/:id', authenticateToken, requireRole(['employer', 'admin']), async (req: express.Request, res: express.Response): Promise<void> => {
+// Delete job (admin only)
+router.delete('/:id', authenticateToken, requireRole(['admin']), async (req: express.Request, res: express.Response): Promise<void> => {
   const authReq = req as AuthRequest;
   try {
     const { id } = req.params;
