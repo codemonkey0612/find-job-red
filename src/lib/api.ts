@@ -1,6 +1,37 @@
 import axios, { AxiosResponse } from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+// Automatically detect protocol and use appropriate API URL
+const getApiBaseUrl = () => {
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL;
+  }
+  
+  // In production, use the same protocol as the page
+  if (typeof window !== 'undefined') {
+    const protocol = window.location.protocol;
+    const hostname = window.location.hostname;
+    
+    // For production on bizresearch.biz, use relative path (same domain)
+    // This avoids mixed content issues
+    if (hostname === 'bizresearch.biz' || hostname.includes('bizresearch')) {
+      return '/api';
+    }
+    
+    // For localhost, use HTTP
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      return 'http://localhost:3001/api';
+    }
+    
+    // Default: use same protocol as current page with port 3001
+    return `${protocol}//${hostname}:3001/api`;
+  }
+  
+  return 'http://localhost:3001/api';
+};
+
+const API_BASE_URL = getApiBaseUrl();
+
+console.log('🔗 API Base URL:', API_BASE_URL);
 
 // Create axios instance
 const api = axios.create({

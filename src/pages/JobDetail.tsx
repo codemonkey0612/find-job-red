@@ -61,85 +61,70 @@ const JobDetail: React.FC = () => {
   const [hasApplied, setHasApplied] = useState(false);
 
   useEffect(() => {
-    // サンプルデータ - 実際のAPI呼び出しに置き換え
-    const sampleJob: Job = {
-      id: 1,
-      title: 'シニアソフトウェアエンジニア',
-      company: 'テックソリューション株式会社',
-      location: '東京都渋谷区',
-      type: 'フルタイム',
-      workStyle: 'ハイブリッド',
-      salary: '月給40万円〜50万円',
-      experience: '5年以上',
-      postedDate: '2024-01-15',
-      deadline: '2024-02-15',
-      description: `
-私たちは革新的なソフトウェアソリューションを提供するテクノロジー企業です。
-シニアソフトウェアエンジニアとして、私たちのエンジニアリングチームに参加し、
-スケーラブルで高性能なアプリケーションの開発に携わっていただきます。
-
-このポジションでは、最新のテクノロジーを使用して複雑な問題を解決し、
-チームメンバーと協力して高品質なソフトウェアを提供することが求められます。
-      `,
-      requirements: [
-        '5年以上のソフトウェア開発経験',
-        'JavaScript、React、Node.jsの深い理解',
-        'クラウド技術（AWS、Azure、GCP）の経験',
-        'マイクロサービスアーキテクチャの経験',
-        'チームリーダーシップの経験',
-        '優れた問題解決能力',
-        'コミュニケーション能力'
-      ],
-      responsibilities: [
-        '高品質なソフトウェアの設計・開発・実装',
-        'チームメンバーのメンタリングと指導',
-        '技術的な意思決定への参加',
-        'コードレビューと品質保証',
-        '新しい技術の調査と導入',
-        'パフォーマンスの最適化',
-        'ドキュメントの作成と保守'
-      ],
-      benefits: [
-        '競争力のある給与',
-        '健康保険・歯科保険・視力保険',
-        '401kプラン（会社マッチング付き）',
-        'フレキシブルな勤務時間',
-        'リモートワーク可能',
-        '教育支援プログラム',
-        '有給休暇・病欠休暇',
-        'ジムメンバーシップ',
-        '交通費補助'
-      ],
-      skills: [
-        'JavaScript',
-        'TypeScript',
-        'React',
-        'Node.js',
-        'Python',
-        'AWS',
-        'Docker',
-        'Kubernetes',
-        'PostgreSQL',
-        'MongoDB'
-      ],
-      companyInfo: {
-        name: 'テックソリューション株式会社',
-        size: '500-1000人',
-        industry: 'テクノロジー',
-        website: 'https://techcorp.com',
-        rating: 4.5,
-        description: '革新的なソフトウェアソリューションを提供するテクノロジー企業です。'
-      },
-      applicationCount: 45,
-      viewCount: 320,
-      isUrgent: false,
-      isRemote: true,
-      isNew: true
+    const fetchJobDetail = async () => {
+      if (!id) return;
+      
+      try {
+        const response = await fetch(`/api/jobs/${id}`);
+        
+        if (response.ok) {
+          const data = await response.json();
+          const jobData = data.data.job;
+          
+          // Transform API data to component format
+          const transformedJob: Job = {
+            id: jobData.id,
+            title: jobData.title,
+            company: jobData.company,
+            location: jobData.location,
+            type: jobData.job_type === 'full-time' ? 'フルタイム' :
+                  jobData.job_type === 'part-time' ? 'パート' :
+                  jobData.job_type === 'contract' ? '契約' : 'インターン',
+            workStyle: jobData.work_style === 'remote' ? 'リモート' :
+                      jobData.work_style === 'hybrid' ? 'ハイブリッド' : 'オンサイト',
+            salary: jobData.salary_min && jobData.salary_max
+              ? `月給${Math.floor(jobData.salary_min / 10000)}万円〜${Math.floor(jobData.salary_max / 10000)}万円`
+              : '応相談',
+            experience: jobData.experience_level === 'entry' ? 'エントリー' :
+                       jobData.experience_level === 'mid' ? 'ミドル' :
+                       jobData.experience_level === 'senior' ? 'シニア' : 'エグゼクティブ',
+            postedDate: new Date(jobData.created_at).toISOString().split('T')[0],
+            deadline: '応募期限なし',
+            description: jobData.description,
+            requirements: jobData.requirements ? jobData.requirements.split(', ') : ['情報なし'],
+            responsibilities: ['詳細は求人説明をご覧ください'],
+            benefits: ['詳細は求人説明をご覧ください'],
+            skills: jobData.requirements ? jobData.requirements.split(', ').slice(0, 5) : [],
+            companyInfo: {
+              name: jobData.company,
+              size: '情報なし',
+              industry: '情報なし',
+              website: '',
+              rating: 0,
+              description: ''
+            },
+            applicationCount: 0,
+            viewCount: 0,
+            isUrgent: false,
+            isRemote: jobData.work_style === 'remote',
+            isNew: (new Date().getTime() - new Date(jobData.created_at).getTime()) < 7 * 24 * 60 * 60 * 1000
+          };
+          
+          setJob(transformedJob);
+        } else {
+          console.error('Failed to fetch job');
+          navigate('/');
+        }
+      } catch (error) {
+        console.error('Error fetching job:', error);
+        navigate('/');
+      } finally {
+        setLoading(false);
+      }
     };
 
-    setJob(sampleJob);
-    setLoading(false);
-  }, [id]);
+    fetchJobDetail();
+  }, [id, navigate]);
 
   const handleFavorite = () => {
     setIsFavorite(!isFavorite);

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -43,6 +44,7 @@ interface Job {
 }
 
 const AdminJobs: React.FC = () => {
+  const { token } = useAuth();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -50,66 +52,35 @@ const AdminJobs: React.FC = () => {
   const [typeFilter, setTypeFilter] = useState<string>('all');
 
   useEffect(() => {
-    // Mock data for now - replace with actual API calls
-    const mockJobs: Job[] = [
-      {
-        id: 1,
-        title: 'フロントエンドエンジニア',
-        company: 'テック株式会社',
-        location: '東京都渋谷区',
-        job_type: 'full-time',
-        work_style: 'remote',
-        experience_level: 'mid',
-        salary_min: 400000,
-        salary_max: 600000,
-        created_by: 2,
-        created_by_name: '佐藤花子',
-        created_at: '2024-01-15',
-        is_active: true,
-        application_count: 12,
-        view_count: 45
-      },
-      {
-        id: 2,
-        title: 'UI/UXデザイナー',
-        company: 'デザイン会社',
-        location: '大阪府大阪市',
-        job_type: 'full-time',
-        work_style: 'hybrid',
-        experience_level: 'entry',
-        salary_min: 300000,
-        salary_max: 450000,
-        created_by: 2,
-        created_by_name: '佐藤花子',
-        created_at: '2024-01-14',
-        is_active: true,
-        application_count: 8,
-        view_count: 32
-      },
-      {
-        id: 3,
-        title: 'バックエンドエンジニア',
-        company: 'システム会社',
-        location: '神奈川県横浜市',
-        job_type: 'contract',
-        work_style: 'onsite',
-        experience_level: 'senior',
-        salary_min: 500000,
-        salary_max: 800000,
-        created_by: 2,
-        created_by_name: '佐藤花子',
-        created_at: '2024-01-13',
-        is_active: false,
-        application_count: 5,
-        view_count: 18
-      }
-    ];
+    const fetchJobs = async () => {
+      try {
+        const response = await fetch('/api/jobs', {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
 
-    setTimeout(() => {
-      setJobs(mockJobs);
-      setLoading(false);
-    }, 1000);
-  }, []);
+        if (response.ok) {
+          const data = await response.json();
+          const jobsData = data.data.jobs.map((job: any) => ({
+            ...job,
+            created_by_name: 'Unknown', // TODO: Add this to API response
+            application_count: 0, // TODO: Add this to API response
+            view_count: 0 // TODO: Add this to API response
+          }));
+          setJobs(jobsData);
+        }
+      } catch (error) {
+        console.error('Error fetching jobs:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (token) {
+      fetchJobs();
+    }
+  }, [token]);
 
   const filteredJobs = jobs.filter(job => {
     const matchesSearch = job.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -123,9 +94,68 @@ const AdminJobs: React.FC = () => {
     return matchesSearch && matchesStatus && matchesType;
   });
 
-  const handleJobAction = (action: string, jobId: number) => {
-    console.log(`${action} job ${jobId}`);
-    // Implement job actions here
+  const handleJobAction = async (action: string, jobId: number) => {
+    try {
+      if (action === 'view') {
+        window.open(`/jobs/${jobId}`, '_blank');
+        return;
+      }
+
+      if (action === 'edit') {
+        // TODO: Implement edit page
+        alert('編集機能は準備中です');
+        return;
+      }
+
+      if (action === 'toggle') {
+        const job = jobs.find(j => j.id === jobId);
+        if (!job) return;
+
+        const response = await fetch(`/api/jobs/${jobId}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            is_active: !job.is_active
+          })
+        });
+
+        if (response.ok) {
+          alert(job.is_active ? '求人を非アクティブにしました' : '求人をアクティブにしました');
+          // Refresh list
+          const updatedJobs = jobs.map(j => 
+            j.id === jobId ? { ...j, is_active: !j.is_active } : j
+          );
+          setJobs(updatedJobs);
+        } else {
+          alert('操作に失敗しました');
+        }
+        return;
+      }
+
+      if (action === 'delete') {
+        if (!confirm('この求人を削除してもよろしいですか？')) return;
+
+        const response = await fetch(`/api/jobs/${jobId}`, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (response.ok) {
+          alert('求人を削除しました');
+          setJobs(jobs.filter(j => j.id !== jobId));
+        } else {
+          alert('削除に失敗しました');
+        }
+      }
+    } catch (error) {
+      console.error('Job action error:', error);
+      alert('エラーが発生しました');
+    }
   };
 
   const getJobTypeLabel = (type: string) => {

@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,6 +12,7 @@ import { X, Plus } from 'lucide-react';
 
 const AddJob: React.FC = () => {
   const navigate = useNavigate();
+  const { user, token } = useAuth();
   const [formData, setFormData] = useState({
     title: '',
     company: '',
@@ -28,16 +30,37 @@ const AddJob: React.FC = () => {
 
   const [newRequirement, setNewRequirement] = useState('');
   const [newBenefit, setNewBenefit] = useState('');
+  const [error, setError] = useState('');
+
+  // Check if user has permission to add jobs
+  useEffect(() => {
+    if (!user) {
+      navigate('/login');
+      return;
+    }
+    
+    if (!['admin', 'employer'].includes(user.role)) {
+      setError('求人を投稿するには、企業アカウントまたは管理者アカウントが必要です。');
+    }
+  }, [user, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError('');
+    
+    if (!['admin', 'employer'].includes(user?.role || '')) {
+      setError('求人を投稿するには、企業アカウントまたは管理者アカウントが必要です。');
+      return;
+    }
     
     try {
-      const response = await fetch('/api/jobs', {
+      // Use relative URL to avoid mixed content issues
+      const apiUrl = '/api/jobs';
+      const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
           ...formData,
@@ -47,14 +70,20 @@ const AddJob: React.FC = () => {
       });
 
       if (response.ok) {
-        alert('求人が正常に追加されました！');
+        const data = await response.json();
+        alert(data.message || '求人が承認待ちとして送信されました。管理者による承認をお待ちください。');
         navigate('/');
       } else {
-        alert('求人の追加に失敗しました');
+        const errorData = await response.json();
+        console.error('Validation errors:', errorData.errors);
+        const errorMessages = errorData.errors 
+          ? errorData.errors.map((e: any) => e.msg).join(', ')
+          : errorData.message || '求人の追加に失敗しました';
+        setError(errorMessages);
       }
     } catch (error) {
       console.error('Error adding job:', error);
-      alert('エラーが発生しました');
+      setError('エラーが発生しました');
     }
   };
 
@@ -92,12 +121,52 @@ const AddJob: React.FC = () => {
     }));
   };
 
+  // Show error message if user doesn't have permission
+  if (error && !['admin', 'employer'].includes(user?.role || '')) {
+    return (
+      <div className="container mx-auto px-4 py-8 max-w-4xl">
+        <div className="text-center">
+          <div className="bg-red-50 border border-red-200 rounded-lg p-8">
+            <h1 className="text-2xl font-bold text-red-800 mb-4">アクセス権限がありません</h1>
+            <p className="text-red-600 mb-6">{error}</p>
+            <div className="space-y-4">
+              <p className="text-gray-600">
+                企業アカウントで求人を投稿するには、以下の手順に従ってください：
+              </p>
+              <div className="bg-white rounded-lg p-4 text-left max-w-md mx-auto">
+                <ol className="list-decimal list-inside space-y-2 text-sm">
+                  <li>現在のアカウントからログアウト</li>
+                  <li>新規登録時に「企業・採用担当者」を選択</li>
+                  <li>または管理者にお問い合わせください</li>
+                </ol>
+              </div>
+              <div className="space-x-4">
+                <Button onClick={() => navigate('/')} variant="outline">
+                  ホームに戻る
+                </Button>
+                <Button onClick={() => navigate('/register')}>
+                  新規登録
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="container mx-auto px-4 py-8 max-w-4xl">
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900 mb-2">求人を追加</h1>
         <p className="text-gray-600">新しい求人情報を入力してください</p>
       </div>
+
+      {error && (
+        <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
+          <p className="text-red-600">{error}</p>
+        </div>
+      )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
         <Card>

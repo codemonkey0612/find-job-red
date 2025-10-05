@@ -56,6 +56,25 @@ export const JobListingSection = ({ title, jobs, showAll = false, defaultDisplay
             </button>
           )}
         </div>
+      </div>
+      
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {displayJobs.map((job) => (
+          <JobCard 
+            key={job.id}
+            id={job.id}
+            title={job.title}
+            company={job.company}
+            location={job.location}
+            salary={job.salary}
+            workTime={job.workTime}
+            employmentType={job.employmentType}
+            description={job.description}
+            tags={job.tags}
+            featured={job.featured}
+          />
+        ))}
+      </div>
       
       {displayJobs.length === 0 && (
         <div className="text-center py-12">

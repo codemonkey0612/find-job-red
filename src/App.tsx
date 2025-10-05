@@ -20,6 +20,8 @@ import Settings from "./pages/Settings";
 import AdminDashboard from "./pages/AdminDashboard";
 import AdminUsers from "./pages/AdminUsers";
 import AdminJobs from "./pages/AdminJobs";
+import AdminJobApproval from "./pages/AdminJobApproval";
+import EmployerJobs from "./pages/EmployerJobs";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -47,6 +49,8 @@ const App = () => (
               <Route path="/admin/dashboard" element={<ProtectedRoute requiredRole="admin"><AdminDashboard /></ProtectedRoute>} />
               <Route path="/admin/users" element={<ProtectedRoute requiredRole="admin"><AdminUsers /></ProtectedRoute>} />
               <Route path="/admin/jobs" element={<ProtectedRoute requiredRole="admin"><AdminJobs /></ProtectedRoute>} />
+              <Route path="/admin/jobs/approval" element={<ProtectedRoute requiredRole="admin"><AdminJobApproval /></ProtectedRoute>} />
+              <Route path="/employer/jobs" element={<ProtectedRoute requiredRole="employer"><EmployerJobs /></ProtectedRoute>} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Layout>

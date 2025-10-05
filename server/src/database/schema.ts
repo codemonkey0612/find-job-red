@@ -30,6 +30,21 @@ export interface Job {
   created_at: string;
   updated_at: string;
   is_active: boolean;
+  approval_status: 'pending' | 'approved' | 'rejected';
+  approved_by?: number | null;
+  approved_at?: string | null;
+  rejection_reason?: string | null;
+}
+
+export interface Notification {
+  id: number;
+  user_id: number;
+  type: 'job_approved' | 'job_rejected' | 'general';
+  title: string;
+  message: string;
+  related_job_id?: number | null;
+  is_read: boolean;
+  created_at: string;
 }
 
 export interface UserProfile {
@@ -85,6 +100,14 @@ export class DatabaseManager {
     try {
       const [rows] = await connection.execute(sql, values);
       return rows;
+    } catch (error: any) {
+      console.error('❌ Database query error:', {
+        message: error.message,
+        code: error.code,
+        sql: sql.substring(0, 100) + '...',
+        values: values
+      });
+      throw error;
     } finally {
       connection.release();
     }
@@ -95,6 +118,14 @@ export class DatabaseManager {
     try {
       const [result] = await connection.execute(sql, values);
       return result;
+    } catch (error: any) {
+      console.error('❌ Database execute error:', {
+        message: error.message,
+        code: error.code,
+        errno: error.errno,
+        sql: sql.substring(0, 100) + '...'
+      });
+      throw error;
     } finally {
       connection.release();
     }
@@ -130,6 +161,7 @@ export class DatabaseManager {
             const result = await this.execute(sql, params);
             return {
               lastInsertRowid: result.insertId,
+              lastInsertId: result.insertId,
               changes: result.affectedRows
             };
           }

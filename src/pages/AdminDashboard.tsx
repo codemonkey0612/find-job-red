@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -13,7 +15,8 @@ import {
   Calendar,
   DollarSign,
   MapPin,
-  Clock
+  Clock,
+  AlertCircle
 } from 'lucide-react';
 
 interface DashboardStats {
@@ -24,48 +27,143 @@ interface DashboardStats {
   newUsersThisMonth: number;
   newJobsThisMonth: number;
   applicationsThisMonth: number;
+  pendingJobs: number;
   topCompanies: Array<{ company: string; jobCount: number }>;
   recentUsers: Array<{ id: number; name: string; email: string; role: string; created_at: string }>;
   recentJobs: Array<{ id: number; title: string; company: string; created_at: string; is_active: boolean }>;
 }
 
 const AdminDashboard: React.FC = () => {
+  const navigate = useNavigate();
+  const { token } = useAuth();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [pendingJobsCount, setPendingJobsCount] = useState(0);
 
   useEffect(() => {
-    // Mock data for now - replace with actual API calls
-    const mockStats: DashboardStats = {
-      totalUsers: 1250,
-      totalJobs: 340,
-      totalApplications: 2150,
-      activeJobs: 298,
-      newUsersThisMonth: 45,
-      newJobsThisMonth: 23,
-      applicationsThisMonth: 180,
-      topCompanies: [
-        { company: '株式会社テックソリューション', jobCount: 12 },
-        { company: 'クリエイティブデザイン株式会社', jobCount: 8 },
-        { company: 'グローバルコンサルティング', jobCount: 6 },
-        { company: 'スタートアップベンチャー', jobCount: 5 }
-      ],
-      recentUsers: [
-        { id: 1, name: '田中太郎', email: 'tanaka@example.com', role: 'user', created_at: '2024-01-15' },
-        { id: 2, name: '佐藤花子', email: 'sato@example.com', role: 'employer', created_at: '2024-01-14' },
-        { id: 3, name: '山田次郎', email: 'yamada@example.com', role: 'user', created_at: '2024-01-13' }
-      ],
-      recentJobs: [
-        { id: 1, title: 'フロントエンドエンジニア', company: 'テック株式会社', created_at: '2024-01-15', is_active: true },
-        { id: 2, title: 'UI/UXデザイナー', company: 'デザイン会社', created_at: '2024-01-14', is_active: true },
-        { id: 3, title: 'バックエンドエンジニア', company: 'システム会社', created_at: '2024-01-13', is_active: false }
-      ]
+    const fetchDashboardData = async () => {
+      if (!token) return;
+
+      try {
+        // Fetch all data in parallel
+        const [pendingJobsRes, jobsRes, usersRes] = await Promise.all([
+          fetch('/api/jobs/pending/list', {
+            headers: { 'Authorization': `Bearer ${token}` }
+          }),
+          fetch('/api/jobs', {
+            headers: { 'Authorization': `Bearer ${token}` }
+          }),
+          fetch('/api/admin/users', {
+            headers: { 'Authorization': `Bearer ${token}` }
+          })
+        ]);
+
+        let pendingJobsCount = 0;
+        let totalJobs = 0;
+        let activeJobs = 0;
+        let recentJobs: any[] = [];
+        let topCompanies: any[] = [];
+        let totalUsers = 0;
+        let recentUsers: any[] = [];
+
+        // Process pending jobs
+        if (pendingJobsRes.ok) {
+          const pendingData = await pendingJobsRes.json();
+          pendingJobsCount = pendingData.data.count || 0;
+        }
+
+        // Process jobs
+        if (jobsRes.ok) {
+          const jobsData = await jobsRes.json();
+          const jobs = jobsData.data.jobs || [];
+          totalJobs = jobs.length;
+          activeJobs = jobs.filter((job: any) => job.is_active).length;
+          
+          // Get recent jobs (last 5)
+          recentJobs = jobs
+            .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+            .slice(0, 5)
+            .map((job: any) => ({
+              id: job.id,
+              title: job.title,
+              company: job.company,
+              created_at: job.created_at,
+              is_active: job.is_active
+            }));
+
+          // Calculate top companies
+          const companyCounts: { [key: string]: number } = {};
+          jobs.forEach((job: any) => {
+            companyCounts[job.company] = (companyCounts[job.company] || 0) + 1;
+          });
+          topCompanies = Object.entries(companyCounts)
+            .map(([company, jobCount]) => ({ company, jobCount }))
+            .sort((a, b) => b.jobCount - a.jobCount)
+            .slice(0, 5);
+        }
+
+        // Process users
+        if (usersRes.ok) {
+          const usersData = await usersRes.json();
+          const users = usersData.data.users || [];
+          totalUsers = users.length;
+          
+          // Get recent users (last 5)
+          recentUsers = users
+            .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+            .slice(0, 5)
+            .map((user: any) => ({
+              id: user.id,
+              name: user.name,
+              email: user.email,
+              role: user.role,
+              created_at: user.created_at
+            }));
+        }
+
+        // Calculate monthly stats (mock for now - would need date-based queries)
+        const currentMonth = new Date().getMonth();
+        const currentYear = new Date().getFullYear();
+        
+        const stats: DashboardStats = {
+          totalUsers,
+          totalJobs,
+          totalApplications: 0, // TODO: Implement applications API
+          activeJobs,
+          newUsersThisMonth: 0, // TODO: Calculate from date
+          newJobsThisMonth: 0, // TODO: Calculate from date
+          applicationsThisMonth: 0, // TODO: Calculate from date
+          pendingJobs: pendingJobsCount,
+          topCompanies,
+          recentUsers,
+          recentJobs
+        };
+
+        setStats(stats);
+        setPendingJobsCount(pendingJobsCount);
+      } catch (error) {
+        console.error('Error fetching dashboard data:', error);
+        // Set minimal stats on error
+        setStats({
+          totalUsers: 0,
+          totalJobs: 0,
+          totalApplications: 0,
+          activeJobs: 0,
+          newUsersThisMonth: 0,
+          newJobsThisMonth: 0,
+          applicationsThisMonth: 0,
+          pendingJobs: 0,
+          topCompanies: [],
+          recentUsers: [],
+          recentJobs: []
+        });
+      } finally {
+        setLoading(false);
+      }
     };
 
-    setTimeout(() => {
-      setStats(mockStats);
-      setLoading(false);
-    }, 1000);
-  }, []);
+    fetchDashboardData();
+  }, [token]);
 
   if (loading) {
     return (
@@ -93,6 +191,35 @@ const AdminDashboard: React.FC = () => {
         <h1 className="text-3xl font-bold text-gray-900 mb-2">管理者ダッシュボード</h1>
         <p className="text-gray-600">システムの概要と統計情報</p>
       </div>
+
+      {/* Pending Jobs Alert */}
+      {pendingJobsCount > 0 && (
+        <Card className="mb-8 border-yellow-500 bg-yellow-50">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="p-3 bg-yellow-100 rounded-full">
+                  <AlertCircle className="h-6 w-6 text-yellow-600" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-yellow-900">
+                    {pendingJobsCount}件の承認待ち求人があります
+                  </h3>
+                  <p className="text-sm text-yellow-700">
+                    採用担当者が投稿した求人が承認を待っています
+                  </p>
+                </div>
+              </div>
+              <Button 
+                onClick={() => navigate('/admin/jobs/approval')}
+                className="bg-yellow-600 hover:bg-yellow-700"
+              >
+                承認管理へ
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* 統計カード */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">

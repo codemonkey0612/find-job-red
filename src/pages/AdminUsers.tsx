@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -36,6 +37,7 @@ interface User {
 }
 
 const AdminUsers: React.FC = () => {
+  const { token } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -43,53 +45,31 @@ const AdminUsers: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
   useEffect(() => {
-    // Mock data for now - replace with actual API calls
-    const mockUsers: User[] = [
-      {
-        id: 1,
-        name: '田中太郎',
-        email: 'tanaka@example.com',
-        role: 'user',
-        email_verified: true,
-        created_at: '2024-01-15',
-        last_login: '2024-01-20',
-        application_count: 5
-      },
-      {
-        id: 2,
-        name: '佐藤花子',
-        email: 'sato@example.com',
-        role: 'employer',
-        email_verified: true,
-        created_at: '2024-01-14',
-        last_login: '2024-01-19',
-        job_count: 3
-      },
-      {
-        id: 3,
-        name: '山田次郎',
-        email: 'yamada@example.com',
-        role: 'user',
-        email_verified: false,
-        created_at: '2024-01-13',
-        application_count: 2
-      },
-      {
-        id: 4,
-        name: '管理者',
-        email: 'admin@bizresearch.com',
-        role: 'admin',
-        email_verified: true,
-        created_at: '2024-01-01',
-        last_login: '2024-01-20'
-      }
-    ];
+    const fetchUsers = async () => {
+      try {
+        const response = await fetch('/api/admin/users', {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
 
-    setTimeout(() => {
-      setUsers(mockUsers);
-      setLoading(false);
-    }, 1000);
-  }, []);
+        if (response.ok) {
+          const data = await response.json();
+          setUsers(data.data.users || []);
+        } else {
+          console.error('Failed to fetch users');
+        }
+      } catch (error) {
+        console.error('Error fetching users:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (token) {
+      fetchUsers();
+    }
+  }, [token]);
 
   const filteredUsers = users.filter(user => {
     const matchesSearch = user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -102,9 +82,69 @@ const AdminUsers: React.FC = () => {
     return matchesSearch && matchesRole && matchesStatus;
   });
 
-  const handleUserAction = (action: string, userId: number) => {
-    console.log(`${action} user ${userId}`);
-    // Implement user actions here
+  const handleUserAction = async (action: string, userId: number) => {
+    try {
+      if (action === 'view') {
+        // TODO: Implement user detail page
+        alert('ユーザー詳細ページは準備中です');
+        return;
+      }
+
+      if (action === 'edit') {
+        // TODO: Implement user edit page
+        alert('編集機能は準備中です');
+        return;
+      }
+
+      if (action === 'verify') {
+        const user = users.find(u => u.id === userId);
+        if (!user) return;
+
+        // TODO: Implement email verification toggle API
+        const response = await fetch(`/api/admin/users/${userId}/verify`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            email_verified: !user.email_verified
+          })
+        });
+
+        if (response.ok) {
+          alert(user.email_verified ? 'メール認証を取り消しました' : 'メール認証を完了しました');
+          const updatedUsers = users.map(u =>
+            u.id === userId ? { ...u, email_verified: !u.email_verified } : u
+          );
+          setUsers(updatedUsers);
+        } else {
+          alert('操作に失敗しました');
+        }
+        return;
+      }
+
+      if (action === 'delete') {
+        if (!confirm('このユーザーを削除してもよろしいですか？関連するデータもすべて削除されます。')) return;
+
+        const response = await fetch(`/api/admin/users/${userId}`, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (response.ok) {
+          alert('ユーザーを削除しました');
+          setUsers(users.filter(u => u.id !== userId));
+        } else {
+          alert('削除に失敗しました');
+        }
+      }
+    } catch (error) {
+      console.error('User action error:', error);
+      alert('エラーが発生しました');
+    }
   };
 
   const getRoleBadgeVariant = (role: string) => {

@@ -1,16 +1,67 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { JobSearchForm } from "@/components/JobSearchForm";
 import { JobListingSection } from "@/components/JobListingSection";
-import { sampleJobs, featuredJobs, recommendedJobs } from "@/data/sampleJobs";
 import officeBuilding from "@/assets/office-building.jpg";
 import businessTeam from "@/assets/business-team.jpg";
 import workspace from "@/assets/workspace.jpg";
 
+interface Job {
+  id: string;
+  title: string;
+  company: string;
+  location: string;
+  salary: string;
+  workTime: string;
+  employmentType: string;
+  description: string;
+  tags: string[];
+  featured?: boolean;
+}
+
 const Index = () => {
-  const [searchResults, setSearchResults] = useState(sampleJobs);
-  const [resultCount, setResultCount] = useState(sampleJobs.length);
+  const [allJobs, setAllJobs] = useState<Job[]>([]);
+  const [searchResults, setSearchResults] = useState<Job[]>([]);
+  const [resultCount, setResultCount] = useState(0);
   const [previewCount, setPreviewCount] = useState<number | undefined>(undefined);
   const [isSearched, setIsSearched] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  // Fetch jobs from API
+  useEffect(() => {
+    const fetchJobs = async () => {
+      try {
+        const response = await fetch('/api/jobs');
+        if (response.ok) {
+          const data = await response.json();
+          const jobs = data.data.jobs.map((job: any) => ({
+            id: job.id.toString(),
+            title: job.title,
+            company: job.company,
+            location: job.location,
+            salary: job.salary_min && job.salary_max 
+              ? `月給${(job.salary_min / 10000).toFixed(0)}万円～${(job.salary_max / 10000).toFixed(0)}万円`
+              : '応相談',
+            workTime: '9:00～18:00', // Default, could be added to schema
+            employmentType: job.job_type === 'full-time' ? '正社員' :
+                           job.job_type === 'part-time' ? 'パート・アルバイト' :
+                           job.job_type === 'contract' ? '契約社員' : 'インターン',
+            description: job.description,
+            tags: job.requirements ? job.requirements.split(', ').slice(0, 3) : [],
+            featured: false
+          }));
+          setAllJobs(jobs);
+          setSearchResults(jobs);
+          setResultCount(jobs.length);
+        }
+      } catch (error) {
+        console.error('Error fetching jobs:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchJobs();
+  }, []);
 
   // 検索フィルタリングロジックを共通化
   const filterJobs = useCallback((params: {
@@ -19,7 +70,7 @@ const Index = () => {
     jobType: string;
     workStyle: string;
   }) => {
-    let filtered = sampleJobs;
+    let filtered = allJobs;
     
     if (params.keyword) {
       filtered = filtered.filter(job => 
@@ -50,7 +101,7 @@ const Index = () => {
     }
     
     return filtered;
-  }, []);
+  }, [allJobs]);
 
   // 検索パラメータ変更時のリアルタイム件数プレビュー
   const handleParamsChange = useCallback((params: {
@@ -151,24 +202,25 @@ const Index = () => {
         </section>
 
         {/* Search Results or Default Sections */}
-        {isSearched ? (
+        {loading ? (
+          <div className="text-center py-12">
+            <p className="text-lg text-gray-600">求人を読み込み中...</p>
+          </div>
+        ) : allJobs.length === 0 ? (
+          <div className="text-center py-12">
+            <p className="text-lg text-gray-600">現在、公開されている求人はありません。</p>
+          </div>
+        ) : isSearched ? (
           <JobListingSection
             title="検索結果"
             jobs={searchResults}
             showAll={true}
           />
         ) : (
-          <>
-            <JobListingSection
-              title="あなたにおすすめの仕事"
-              jobs={recommendedJobs}
-            />
-            
-            <JobListingSection
-              title="注目の仕事"
-              jobs={featuredJobs}
-            />
-          </>
+          <JobListingSection
+            title="すべての求人"
+            jobs={allJobs}
+          />
         )}
       </div>
     </div>

@@ -146,9 +146,9 @@ router.get('/', optionalAuth, [
     const offset = (Number(page) - 1) * Number(limit);
     const db = dbManager.getDb();
 
-    // Build WHERE clause
-    let whereConditions = ['j.is_active = 1'];
-    let params: any[] = [];
+    // Build WHERE clause - only show approved jobs
+    let whereConditions = ['j.is_active = 1', '(j.approval_status = ? OR j.approval_status IS NULL)'];
+    let params: any[] = ['approved'];
 
     if (keyword) {
       whereConditions.push('(j.title LIKE ? OR j.company LIKE ? OR j.description LIKE ?)');
@@ -261,18 +261,211 @@ router.get('/:id', optionalAuth, async (req: express.Request, res: express.Respo
   }
 });
 
-// Create new job (admin only)
-router.post('/', authenticateToken, requireRole(['admin']), [
+// Create new job (employers and admins only)
+router.post('/', authenticateToken, requireRole(['admin', 'employer']), [
   body('title').trim().isLength({ min: 3 }).withMessage('Title must be at least 3 characters'),
   body('company').trim().isLength({ min: 2 }).withMessage('Company must be at least 2 characters'),
   body('location').trim().notEmpty().withMessage('Location is required'),
   body('description').trim().isLength({ min: 10 }).withMessage('Description must be at least 10 characters'),
-  body('requirements').trim().isLength({ min: 5 }).withMessage('Requirements must be at least 5 characters'),
-  body('salary_min').optional().isInt({ min: 0 }),
-  body('salary_max').optional().isInt({ min: 0 }),
+  body('requirements').custom((value) => {
+    // Allow empty arrays or undefined (optional field)
+    if (!value || (Array.isArray(value) && value.length === 0)) {
+      return true;
+    }
+    if (Array.isArray(value) && value.length > 0) {
+      return true;
+    }
+    if (typeof value === 'string' && value.trim().length >= 5) {
+      return true;
+    }
+    if (typeof value === 'string' && value.trim().length < 5) {
+      throw new Error('Requirements must be at least 5 characters');
+    }
+    return true;
+  }).optional(),
+  body('salary_min').optional().isInt({ min: 0, max: 2147483647 }).withMessage('Salary minimum must be between 0 and 2,147,483,647'),
+  body('salary_max').optional().isInt({ min: 0, max: 2147483647 }).withMessage('Salary maximum must be between 0 and 2,147,483,647'),
   body('job_type').isIn(['full-time', 'part-time', 'contract', 'internship']),
   body('work_style').isIn(['remote', 'hybrid', 'onsite']),
   body('experience_level').isIn(['entry', 'mid', 'senior', 'executive'])
+], async (req: express.Request, res: express.Response): Promise<void> => {
+  const authReq = req as AuthRequest;
+  try {
+    console.log('=== Job creation request received ===');
+    console.log('User:', authReq.user?.id, authReq.user?.role);
+    console.log('Request body:', JSON.stringify(req.body, null, 2));
+    
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      console.error('Validation errors:', errors.array());
+      res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: errors.array()
+      });
+      return;
+    }
+
+    const {
+      title,
+      company,
+      location,
+      description,
+      requirements,
+      benefits,
+      salary_min,
+      salary_max,
+      job_type,
+      work_style,
+      experience_level
+    } = req.body;
+    
+    console.log('Extracted data:', { title, company, location, requirements: Array.isArray(requirements) ? requirements.length : 'string' });
+
+    // Convert requirements array to string if needed
+    const requirementsString = Array.isArray(requirements) 
+      ? (requirements.length > 0 ? requirements.join(', ') : 'Not specified')
+      : (requirements || 'Not specified');
+
+    // Convert benefits array to string if needed (for future use)
+    const benefitsString = Array.isArray(benefits) 
+      ? benefits.join(', ') 
+      : (benefits || '');
+
+    const db = dbManager.getDb();
+
+    // Try to insert with approval_status, fall back if column doesn't exist
+    let result;
+    try {
+      result = await db.prepare(`
+        INSERT INTO jobs (
+          title, company, location, description, requirements,
+          salary_min, salary_max, job_type, work_style, experience_level,
+          created_by, is_active, approval_status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        title, company, location, description, requirementsString,
+        salary_min, salary_max, job_type, work_style, experience_level,
+        authReq.user!.id, false, 'pending'
+      );
+    } catch (dbError: any) {
+      // Log the actual error for debugging
+      console.error('Database insert error:', dbError);
+      console.error('Error details:', {
+        message: dbError.message,
+        code: dbError.code,
+        errno: dbError.errno
+      });
+      
+      // If approval_status column doesn't exist, insert without it
+      if (dbError.message && (dbError.message.includes('approval_status') || dbError.errno === 1054)) {
+        console.log('Falling back to insert without approval_status column...');
+        result = await db.prepare(`
+          INSERT INTO jobs (
+            title, company, location, description, requirements,
+            salary_min, salary_max, job_type, work_style, experience_level,
+            created_by
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          title, company, location, description, requirementsString,
+          salary_min, salary_max, job_type, work_style, experience_level,
+          authReq.user!.id
+        );
+      } else {
+        throw dbError;
+      }
+    }
+
+    // Get the created job
+    const job = await db.prepare('SELECT * FROM jobs WHERE id = ?').get(result.lastInsertRowid) as Job;
+
+    res.status(201).json({
+      success: true,
+      message: 'Job submitted for approval. An administrator will review it shortly.',
+      data: { job }
+    });
+  } catch (error: any) {
+    console.error('=== Create job error ===');
+    console.error('Error type:', error.constructor.name);
+    console.error('Error message:', error.message);
+    console.error('Error stack:', error.stack);
+    console.error('Full error:', error);
+    
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// Approve job (admin only)
+router.post('/:id/approve', authenticateToken, requireRole(['admin']), async (req: express.Request, res: express.Response): Promise<void> => {
+  const authReq = req as AuthRequest;
+  try {
+    const { id } = req.params;
+    const db = dbManager.getDb();
+
+    // Get the job
+    const job = await db.prepare('SELECT * FROM jobs WHERE id = ?').get(id) as Job;
+
+    if (!job) {
+      res.status(404).json({
+        success: false,
+        message: 'Job not found'
+      });
+      return;
+    }
+
+    if (job.approval_status === 'approved') {
+      res.status(400).json({
+        success: false,
+        message: 'Job is already approved'
+      });
+      return;
+    }
+
+    // Update job to approved
+    await db.prepare(`
+      UPDATE jobs 
+      SET approval_status = 'approved', 
+          is_active = true,
+          approved_by = ?,
+          approved_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(authReq.user!.id, id);
+
+    // Create notification for the employer
+    await db.prepare(`
+      INSERT INTO notifications (user_id, type, title, message, related_job_id)
+      VALUES (?, 'job_approved', ?, ?, ?)
+    `).run(
+      job.created_by,
+      '求人が承認されました',
+      `あなたの求人「${job.title}」が承認され、公開されました。`,
+      id
+    );
+
+    // Get updated job
+    const updatedJob = await db.prepare('SELECT * FROM jobs WHERE id = ?').get(id) as Job;
+
+    res.status(200).json({
+      success: true,
+      message: 'Job approved successfully',
+      data: { job: updatedJob }
+    });
+  } catch (error) {
+    console.error('Approve job error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+});
+
+// Reject job (admin only)
+router.post('/:id/reject', authenticateToken, requireRole(['admin']), [
+  body('rejection_reason').trim().isLength({ min: 10 }).withMessage('Rejection reason must be at least 10 characters')
 ], async (req: express.Request, res: express.Response): Promise<void> => {
   const authReq = req as AuthRequest;
   try {
@@ -283,45 +476,117 @@ router.post('/', authenticateToken, requireRole(['admin']), [
         message: 'Validation failed',
         errors: errors.array()
       });
+      return;
     }
 
-    const {
-      title,
-      company,
-      location,
-      description,
-      requirements,
-      salary_min,
-      salary_max,
-      job_type,
-      work_style,
-      experience_level
-    } = req.body;
-
+    const { id } = req.params;
+    const { rejection_reason } = req.body;
     const db = dbManager.getDb();
 
-    const result = await db.prepare(`
-      INSERT INTO jobs (
-        title, company, location, description, requirements,
-        salary_min, salary_max, job_type, work_style, experience_level,
-        created_by
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    // Get the job
+    const job = await db.prepare('SELECT * FROM jobs WHERE id = ?').get(id) as Job;
+
+    if (!job) {
+      res.status(404).json({
+        success: false,
+        message: 'Job not found'
+      });
+      return;
+    }
+
+    if (job.approval_status === 'rejected') {
+      res.status(400).json({
+        success: false,
+        message: 'Job is already rejected'
+      });
+      return;
+    }
+
+    // Update job to rejected
+    await db.prepare(`
+      UPDATE jobs 
+      SET approval_status = 'rejected',
+          is_active = false,
+          approved_by = ?,
+          approved_at = CURRENT_TIMESTAMP,
+          rejection_reason = ?
+      WHERE id = ?
+    `).run(authReq.user!.id, rejection_reason, id);
+
+    // Create notification for the employer
+    await db.prepare(`
+      INSERT INTO notifications (user_id, type, title, message, related_job_id)
+      VALUES (?, 'job_rejected', ?, ?, ?)
     `).run(
-      title, company, location, description, requirements,
-      salary_min, salary_max, job_type, work_style, experience_level,
-      authReq.user!.id
+      job.created_by,
+      '求人が却下されました',
+      `あなたの求人「${job.title}」が却下されました。理由: ${rejection_reason}`,
+      id
     );
 
-    // Get the created job
-    const job = await db.prepare('SELECT * FROM jobs WHERE id = ?').get(result.lastInsertRowid) as Job;
+    // Get updated job
+    const updatedJob = await db.prepare('SELECT * FROM jobs WHERE id = ?').get(id) as Job;
 
-    res.status(201).json({
+    res.status(200).json({
       success: true,
-      message: 'Job created successfully',
-      data: { job }
+      message: 'Job rejected successfully',
+      data: { job: updatedJob }
     });
   } catch (error) {
-    console.error('Create job error:', error);
+    console.error('Reject job error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+});
+
+// Get employer's own jobs (employer and admin only)
+router.get('/my-jobs', authenticateToken, requireRole(['employer', 'admin']), async (req: express.Request, res: express.Response): Promise<void> => {
+  const authReq = req as AuthRequest;
+  try {
+    const db = dbManager.getDb();
+
+    const jobs = await db.prepare(`
+      SELECT * FROM jobs
+      WHERE created_by = ?
+      ORDER BY created_at DESC
+    `).all(authReq.user!.id) as Job[];
+
+    res.status(200).json({
+      success: true,
+      message: 'Jobs retrieved successfully',
+      data: { jobs }
+    });
+  } catch (error) {
+    console.error('Get my jobs error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+});
+
+// Get pending jobs for approval (admin only)
+router.get('/pending/list', authenticateToken, requireRole(['admin']), async (req: express.Request, res: express.Response): Promise<void> => {
+  try {
+    const db = dbManager.getDb();
+
+    const jobs = await db.prepare(`
+      SELECT j.*, u.name as employer_name, u.email as employer_email
+      FROM jobs j
+      JOIN users u ON j.created_by = u.id
+      WHERE j.approval_status = 'pending'
+      ORDER BY j.created_at DESC
+    `).all() as Job[];
+
+    res.status(200).json({
+      success: true,
+      message: 'Pending jobs retrieved successfully',
+      data: { jobs, count: jobs.length }
+    });
+  } catch (error) {
+    console.error('Get pending jobs error:', error);
     res.status(500).json({
       success: false,
       message: 'Internal server error'
@@ -336,8 +601,8 @@ router.put('/:id', authenticateToken, requireRole(['admin']), [
   body('location').optional().trim().notEmpty(),
   body('description').optional().trim().isLength({ min: 10 }),
   body('requirements').optional().trim().isLength({ min: 5 }),
-  body('salary_min').optional().isInt({ min: 0 }),
-  body('salary_max').optional().isInt({ min: 0 }),
+  body('salary_min').optional().isInt({ min: 0, max: 2147483647 }).withMessage('Salary minimum must be between 0 and 2,147,483,647'),
+  body('salary_max').optional().isInt({ min: 0, max: 2147483647 }).withMessage('Salary maximum must be between 0 and 2,147,483,647'),
   body('job_type').optional().isIn(['full-time', 'part-time', 'contract', 'internship']),
   body('work_style').optional().isIn(['remote', 'hybrid', 'onsite']),
   body('experience_level').optional().isIn(['entry', 'mid', 'senior', 'executive']),

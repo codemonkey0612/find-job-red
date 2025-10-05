@@ -7,6 +7,8 @@ import { dbManager } from './database/schema.js';
 import authRoutes from './routes/auth.js';
 import jobRoutes from './routes/jobs.js';
 import adminRoutes from './routes/admin.js';
+import notificationRoutes from './routes/notifications.js';
+import { errorLogger, finalErrorHandler, requestTimeout } from './middleware/errorHandler.js';
 // Simple Swagger setup without complex imports
 import swaggerUi from 'swagger-ui-express';
 import swaggerJsdoc from 'swagger-jsdoc';
@@ -272,6 +274,9 @@ app.get('/api-docs/swagger.json', (req, res) => {
   res.send(specs);
 });
 
+// Request timeout middleware (30 seconds)
+app.use(requestTimeout(30000));
+
 // Serve Swagger UI
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(specs, swaggerUiOptions));
 
@@ -279,6 +284,7 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(specs, swaggerUiOptions));
 app.use('/api/auth', authRoutes);
 app.use('/api/jobs', jobRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // 404 handler
 app.use('*', (req, res) => {
@@ -288,16 +294,9 @@ app.use('*', (req, res) => {
   });
 });
 
-// Global error handler
-app.use((error: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  console.error('Global error handler:', error);
-  
-  res.status(error.status || 500).json({
-    success: false,
-    message: error.message || 'Internal server error',
-    ...(process.env.NODE_ENV === 'development' && { stack: error.stack })
-  });
-});
+// Error handling middleware (order matters!)
+app.use(errorLogger);
+app.use(finalErrorHandler);
 
 // Start server
 const startServer = async () => {
@@ -335,6 +334,37 @@ process.on('SIGTERM', async () => {
   console.log('\nShutting down server...');
   await dbManager.close();
   process.exit(0);
+});
+
+// Process-level exception handlers - prevent server crashes
+process.on('uncaughtException', (error: Error) => {
+  console.error('❌ UNCAUGHT EXCEPTION! Server will continue running...');
+  console.error('Error name:', error.name);
+  console.error('Error message:', error.message);
+  console.error('Stack trace:', error.stack);
+  
+  // Log to file or external service in production
+  if (process.env.NODE_ENV === 'production') {
+    // TODO: Send to logging service (e.g., Sentry, LogRocket)
+  }
+});
+
+process.on('unhandledRejection', (reason: any, promise: Promise<any>) => {
+  console.error('❌ UNHANDLED PROMISE REJECTION! Server will continue running...');
+  console.error('Reason:', reason);
+  console.error('Promise:', promise);
+  
+  // Log to file or external service in production
+  if (process.env.NODE_ENV === 'production') {
+    // TODO: Send to logging service
+  }
+});
+
+// Handle warnings
+process.on('warning', (warning) => {
+  console.warn('⚠️  Process warning:', warning.name);
+  console.warn('Message:', warning.message);
+  console.warn('Stack:', warning.stack);
 });
 
 startServer();
