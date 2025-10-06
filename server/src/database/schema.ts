@@ -1,3 +1,6 @@
+import dotenv from 'dotenv';
+dotenv.config();
+
 import * as mysql from 'mysql2/promise';
 
 export interface User {

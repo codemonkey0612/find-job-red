@@ -129,6 +129,7 @@ router.get('/', optionalAuth, [
         message: 'Validation failed',
         errors: errors.array()
       });
+      return;
     }
 
     const {

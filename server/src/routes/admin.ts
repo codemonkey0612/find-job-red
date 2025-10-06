@@ -364,6 +364,10 @@ router.get('/jobs', async (req: express.Request, res: express.Response): Promise
         j.created_by,
         j.created_at,
         j.is_active,
+        j.approval_status,
+        j.approved_by,
+        j.approved_at,
+        j.rejection_reason,
         u.name as created_by_name,
         COALESCE(app_counts.application_count, 0) as application_count,
         COALESCE(view_counts.view_count, 0) as view_count
@@ -466,6 +470,75 @@ router.post('/users/:id/toggle-verification', async (req: express.Request, res: 
     });
   } catch (error) {
     console.error('Toggle user verification error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/admin/users/{id}:
+ *   delete:
+ *     summary: Delete a user
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: User ID
+ *     responses:
+ *       200:
+ *         description: User deleted successfully
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - Admin access required
+ *       404:
+ *         description: User not found
+ */
+router.delete('/users/:id', async (req: express.Request, res: express.Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+
+    // Check if user exists
+    const users = await dbManager.query('SELECT * FROM users WHERE id = ?', [id]);
+    if (users.length === 0) {
+      res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+      return;
+    }
+
+    const user = users[0];
+
+    // Prevent deletion of admin users
+    if (user.role === 'admin') {
+      res.status(403).json({
+        success: false,
+        message: 'Cannot delete admin users'
+      });
+      return;
+    }
+
+    // Delete user (related records will be handled by foreign key constraints)
+    await dbManager.execute('DELETE FROM users WHERE id = ?', [id]);
+
+    res.json({
+      success: true,
+      message: 'User deleted successfully',
+      data: {
+        userId: id
+      }
+    });
+  } catch (error) {
+    console.error('Delete user error:', error);
     res.status(500).json({
       success: false,
       message: 'Internal server error'

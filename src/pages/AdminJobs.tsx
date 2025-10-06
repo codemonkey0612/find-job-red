@@ -39,6 +39,10 @@ interface Job {
   created_by_name: string;
   created_at: string;
   is_active: boolean;
+  approval_status?: string;
+  approved_by?: number;
+  approved_at?: string;
+  rejection_reason?: string;
   application_count: number;
   view_count: number;
 }
@@ -54,7 +58,7 @@ const AdminJobs: React.FC = () => {
   useEffect(() => {
     const fetchJobs = async () => {
       try {
-        const response = await fetch('/api/jobs', {
+        const response = await fetch('/api/admin/jobs', {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -62,13 +66,9 @@ const AdminJobs: React.FC = () => {
 
         if (response.ok) {
           const data = await response.json();
-          const jobsData = data.data.jobs.map((job: any) => ({
-            ...job,
-            created_by_name: 'Unknown', // TODO: Add this to API response
-            application_count: 0, // TODO: Add this to API response
-            view_count: 0 // TODO: Add this to API response
-          }));
-          setJobs(jobsData);
+          setJobs(data.data?.jobs || []);
+        } else {
+          console.error('Failed to fetch jobs');
         }
       } catch (error) {
         console.error('Error fetching jobs:', error);
@@ -111,15 +111,12 @@ const AdminJobs: React.FC = () => {
         const job = jobs.find(j => j.id === jobId);
         if (!job) return;
 
-        const response = await fetch(`/api/jobs/${jobId}`, {
-          method: 'PUT',
+        const response = await fetch(`/api/admin/jobs/${jobId}/toggle-status`, {
+          method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({
-            is_active: !job.is_active
-          })
+          }
         });
 
         if (response.ok) {

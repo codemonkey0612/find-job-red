@@ -54,8 +54,8 @@ const AdminUsers: React.FC = () => {
         });
 
         if (response.ok) {
-          const data = await response.json();
-          setUsers(data.data.users || []);
+          const result = await response.json();
+          setUsers(result.data?.users || []);
         } else {
           console.error('Failed to fetch users');
         }
@@ -100,16 +100,12 @@ const AdminUsers: React.FC = () => {
         const user = users.find(u => u.id === userId);
         if (!user) return;
 
-        // TODO: Implement email verification toggle API
-        const response = await fetch(`/api/admin/users/${userId}/verify`, {
-          method: 'PUT',
+        const response = await fetch(`/api/admin/users/${userId}/toggle-verification`, {
+          method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({
-            email_verified: !user.email_verified
-          })
+          }
         });
 
         if (response.ok) {
