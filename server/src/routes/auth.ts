@@ -1163,4 +1163,192 @@ router.post('/create-admin', async (req: express.Request, res: express.Response)
   }
 });
 
+/**
+ * @swagger
+ * /api/auth/forgot-password:
+ *   post:
+ *     summary: Request password reset
+ *     tags: [Authentication]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *     responses:
+ *       200:
+ *         description: Password reset email sent (always returns success for security)
+ */
+router.post('/forgot-password', [
+  body('email').isEmail().normalizeEmail()
+], async (req: express.Request, res: express.Response): Promise<void> => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: errors.array()
+      });
+      return;
+    }
+
+    const { email } = req.body;
+    
+    // Find user by email
+    const users = await dbManager.query('SELECT * FROM users WHERE email = ?', [email]);
+    
+    // For security, always return success even if user doesn't exist
+    if (users.length === 0) {
+      res.json({
+        success: true,
+        message: 'パスワードリセットの手順をメールで送信しました。メールをご確認ください。'
+      });
+      return;
+    }
+
+    const user = users[0];
+    
+    // Generate reset token
+    const resetToken = jwt.sign(
+      { userId: user.id, email: user.email },
+      process.env.JWT_SECRET || 'your-secret-key',
+      { expiresIn: '1h' }
+    );
+
+    // Store token in database
+    const expiresAt = new Date(Date.now() + 3600000); // 1 hour from now
+    
+    // Delete any existing tokens for this user
+    await dbManager.execute('DELETE FROM password_reset_tokens WHERE user_id = ?', [user.id]);
+    
+    // Insert new token
+    await dbManager.execute(
+      'INSERT INTO password_reset_tokens (user_id, token, expires_at) VALUES (?, ?, ?)',
+      [user.id, resetToken, expiresAt.toISOString()]
+    );
+
+    // In a real application, send email here
+    // For now, we'll just log the reset link
+    console.log(`Password reset link for ${email}: http://localhost:5173/reset-password?token=${resetToken}`);
+
+    res.json({
+      success: true,
+      message: 'パスワードリセットの手順をメールで送信しました。メールをご確認ください。',
+      // Remove this in production! Only for development
+      data: process.env.NODE_ENV === 'development' ? { resetToken, resetLink: `/reset-password?token=${resetToken}` } : undefined
+    });
+  } catch (error) {
+    console.error('Forgot password error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/auth/reset-password:
+ *   post:
+ *     summary: Reset password with token
+ *     tags: [Authentication]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - token
+ *               - newPassword
+ *             properties:
+ *               token:
+ *                 type: string
+ *               newPassword:
+ *                 type: string
+ *                 minLength: 6
+ *     responses:
+ *       200:
+ *         description: Password reset successfully
+ */
+router.post('/reset-password', [
+  body('token').notEmpty().withMessage('Token is required'),
+  body('newPassword').isLength({ min: 6 }).withMessage('Password must be at least 6 characters')
+], async (req: express.Request, res: express.Response): Promise<void> => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: errors.array()
+      });
+      return;
+    }
+
+    const { token, newPassword } = req.body;
+
+    // Verify token
+    let decoded: any;
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
+    } catch (err) {
+      res.status(400).json({
+        success: false,
+        message: 'トークンが無効または期限切れです'
+      });
+      return;
+    }
+
+    // Check if token exists in database and is not expired
+    const tokens = await dbManager.query(
+      'SELECT * FROM password_reset_tokens WHERE token = ? AND expires_at > ?',
+      [token, new Date().toISOString()]
+    );
+
+    if (tokens.length === 0) {
+      res.status(400).json({
+        success: false,
+        message: 'トークンが無効または期限切れです'
+      });
+      return;
+    }
+
+    const resetToken = tokens[0];
+
+    // Hash new password
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    // Update user password
+    await dbManager.execute(
+      'UPDATE users SET password = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      [hashedPassword, resetToken.user_id]
+    );
+
+    // Delete used token
+    await dbManager.execute('DELETE FROM password_reset_tokens WHERE id = ?', [resetToken.id]);
+
+    // Also delete other tokens for this user
+    await dbManager.execute('DELETE FROM password_reset_tokens WHERE user_id = ?', [resetToken.user_id]);
+
+    res.json({
+      success: true,
+      message: 'パスワードが正常にリセットされました。新しいパスワードでログインしてください。'
+    });
+  } catch (error) {
+    console.error('Reset password error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+});
+
 export default router;

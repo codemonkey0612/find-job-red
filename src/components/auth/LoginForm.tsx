@@ -87,7 +87,15 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess, onSwitchToRegis
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="password">パスワード</Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="password">パスワード</Label>
+              <a 
+                href="/forgot-password" 
+                className="text-sm text-blue-600 hover:underline"
+              >
+                パスワードを忘れた場合
+              </a>
+            </div>
             <div className="relative">
               <Input
                 id="password"
