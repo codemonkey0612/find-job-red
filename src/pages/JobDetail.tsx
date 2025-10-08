@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -55,10 +56,12 @@ interface Job {
 const JobDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { token, user } = useAuth();
   const [job, setJob] = useState<Job | null>(null);
   const [loading, setLoading] = useState(true);
   const [isFavorite, setIsFavorite] = useState(false);
   const [hasApplied, setHasApplied] = useState(false);
+  const [applying, setApplying] = useState(false);
 
   useEffect(() => {
     const fetchJobDetail = async () => {
@@ -111,6 +114,11 @@ const JobDetail: React.FC = () => {
           };
           
           setJob(transformedJob);
+          
+          // Check if user has already applied (only if logged in)
+          if (user && token) {
+            checkIfApplied();
+          }
         } else {
           console.error('Failed to fetch job');
           navigate('/');
@@ -123,20 +131,73 @@ const JobDetail: React.FC = () => {
       }
     };
 
+    const checkIfApplied = async () => {
+      if (!token) return;
+      
+      try {
+        const response = await fetch('/api/jobs/my-applications', {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          const applications = data.data?.applications || [];
+          const applied = applications.some((app: any) => app.job_id === parseInt(id!));
+          setHasApplied(applied);
+        }
+      } catch (error) {
+        console.error('Error checking application status:', error);
+      }
+    };
+
     fetchJobDetail();
-  }, [id, navigate]);
+  }, [id, navigate, user, token]);
 
   const handleFavorite = () => {
     setIsFavorite(!isFavorite);
   };
 
-  const handleApply = () => {
+  const handleApply = async () => {
+    // Check if user is logged in
+    if (!user || !token) {
+      alert('応募するにはログインが必要です');
+      navigate('/login');
+      return;
+    }
+
     if (hasApplied) {
       alert('既に応募済みです');
       return;
     }
-    setHasApplied(true);
-    alert('応募が完了しました！');
+
+    setApplying(true);
+    
+    try {
+      const response = await fetch(`/api/jobs/${id}/apply`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({})
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setHasApplied(true);
+        alert('応募が完了しました！');
+      } else {
+        alert(data.message || '応募に失敗しました');
+      }
+    } catch (error) {
+      console.error('Error applying for job:', error);
+      alert('応募中にエラーが発生しました');
+    } finally {
+      setApplying(false);
+    }
   };
 
   const handleShare = () => {
@@ -240,6 +301,7 @@ const JobDetail: React.FC = () => {
             </Button>
             <Button 
               onClick={handleApply}
+              disabled={applying || hasApplied}
               className={hasApplied ? 'bg-green-600 hover:bg-green-700' : ''}
             >
               {hasApplied ? (
@@ -247,6 +309,8 @@ const JobDetail: React.FC = () => {
                   <CheckCircle className="h-4 w-4 mr-2" />
                   応募済み
                 </>
+              ) : applying ? (
+                '応募中...'
               ) : (
                 '応募する'
               )}

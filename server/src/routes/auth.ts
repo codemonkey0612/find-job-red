@@ -485,7 +485,7 @@ router.post('/google', async (req: express.Request, res: express.Response): Prom
       const result = await dbManager.execute(`
         INSERT INTO users (email, password_hash, name, role, email_verified, auth_provider, provider_id, avatar_url)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `, [email, null, name, 'user', true, 'google', googleId, picture]);
+      `, [email, null, name, 'user', 1, 'google', googleId, picture]);
 
       // Create user profile
       await dbManager.execute(`
@@ -631,7 +631,7 @@ router.post('/linkedin', async (req: express.Request, res: express.Response): Pr
       const result = await dbManager.execute(`
         INSERT INTO users (email, password_hash, name, role, email_verified, auth_provider, provider_id)
         VALUES (?, ?, ?, ?, ?, ?, ?)
-      `, [emailAddress, null, name, 'user', true, 'linkedin', linkedinId]);
+      `, [emailAddress, null, name, 'user', 1, 'linkedin', linkedinId]);
 
       // Create user profile
       await dbManager.execute(`

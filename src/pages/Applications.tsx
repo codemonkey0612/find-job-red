@@ -41,37 +41,43 @@ const Applications: React.FC = () => {
   const { token, user } = useAuth();
   const [applications, setApplications] = useState<Application[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
 
   useEffect(() => {
+    const fetchApplications = async () => {
+      try {
+        setError(null);
+        const response = await fetch('/api/jobs/my-applications', {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setApplications(data.data?.applications || []);
+        } else {
+          const errorData = await response.json().catch(() => ({}));
+          setError(errorData.message || 'Failed to fetch applications');
+          console.error('Failed to fetch applications:', errorData);
+        }
+      } catch (error) {
+        console.error('Error fetching applications:', error);
+        setError('ネットワークエラーが発生しました。後でもう一度お試しください。');
+      } finally {
+        setLoading(false);
+      }
+    };
+
     if (!user) {
       navigate('/login');
       return;
     }
+    
     fetchApplications();
   }, [user, token, navigate]);
-
-  const fetchApplications = async () => {
-    try {
-      const response = await fetch('/api/jobs/my-applications', {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setApplications(data.data?.applications || []);
-      } else {
-        console.error('Failed to fetch applications');
-      }
-    } catch (error) {
-      console.error('Error fetching applications:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const statusOptions = [
     { value: 'all', label: 'すべての応募', count: applications.length },
@@ -161,6 +167,15 @@ const Applications: React.FC = () => {
         <h1 className="text-3xl font-bold text-gray-900 mb-2">求人応募</h1>
         <p className="text-gray-600">応募した求人を確認・管理できます</p>
       </div>
+
+      {error && (
+        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-md">
+          <div className="flex items-center">
+            <AlertCircle className="h-5 w-5 text-red-600 mr-2" />
+            <p className="text-red-800">{error}</p>
+          </div>
+        </div>
+      )}
 
       {/* Search and Filters */}
       <div className="mb-8 space-y-4">

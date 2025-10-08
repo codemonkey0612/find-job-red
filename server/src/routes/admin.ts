@@ -201,7 +201,7 @@ router.get('/users', async (req: express.Request, res: express.Response): Promis
 
     if (verified !== '') {
       whereConditions.push('u.email_verified = ?');
-      queryParams.push(verified === 'true');
+      queryParams.push(verified === 'true' ? 1 : 0);
     }
 
     const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
@@ -332,7 +332,7 @@ router.get('/jobs', async (req: express.Request, res: express.Response): Promise
 
     if (status !== 'all') {
       whereConditions.push('j.is_active = ?');
-      queryParams.push(status === 'active');
+      queryParams.push(status === 'active' ? 1 : 0);
     }
 
     if (type) {
@@ -343,13 +343,17 @@ router.get('/jobs', async (req: express.Request, res: express.Response): Promise
     const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
 
     // Get total count
-    const [countResult] = await dbManager.query(`
+    const countResults = await dbManager.query(`
       SELECT COUNT(*) as total 
       FROM jobs j 
       ${whereClause}
     `, queryParams);
+    
+    console.log('Count query results:', countResults);
+    const countResult = countResults[0];
+    console.log('Count result:', countResult);
 
-    // Get jobs with application and view counts
+    // Get jobs with application counts (removed job_views since table doesn't exist)
     const jobs = await dbManager.query(`
       SELECT 
         j.id,
@@ -370,7 +374,7 @@ router.get('/jobs', async (req: express.Request, res: express.Response): Promise
         j.rejection_reason,
         u.name as created_by_name,
         COALESCE(app_counts.application_count, 0) as application_count,
-        COALESCE(view_counts.view_count, 0) as view_count
+        0 as view_count
       FROM jobs j
       JOIN users u ON j.created_by = u.id
       LEFT JOIN (
@@ -378,15 +382,13 @@ router.get('/jobs', async (req: express.Request, res: express.Response): Promise
         FROM job_applications 
         GROUP BY job_id
       ) app_counts ON j.id = app_counts.job_id
-      LEFT JOIN (
-        SELECT job_id, COUNT(*) as view_count 
-        FROM job_views 
-        GROUP BY job_id
-      ) view_counts ON j.id = view_counts.job_id
       ${whereClause}
       ORDER BY j.created_at DESC
       LIMIT ? OFFSET ?
     `, [...queryParams, limit, offset]);
+
+    console.log('Jobs query results count:', jobs?.length);
+    console.log('First job:', jobs?.[0]);
 
     const totalPages = Math.ceil(countResult.total / limit);
 
@@ -452,7 +454,7 @@ router.post('/users/:id/toggle-verification', async (req: express.Request, res: 
     }
 
     const user = users[0];
-    const newVerificationStatus = !user.email_verified;
+    const newVerificationStatus = user.email_verified ? 0 : 1;
 
     // Update verification status
     await dbManager.execute(
@@ -462,10 +464,10 @@ router.post('/users/:id/toggle-verification', async (req: express.Request, res: 
 
     res.json({
       success: true,
-      message: `User verification status updated to ${newVerificationStatus ? 'verified' : 'unverified'}`,
+      message: `User verification status updated to ${newVerificationStatus === 1 ? 'verified' : 'unverified'}`,
       data: {
         userId: id,
-        emailVerified: newVerificationStatus
+        emailVerified: newVerificationStatus === 1
       }
     });
   } catch (error) {
@@ -586,7 +588,7 @@ router.post('/jobs/:id/toggle-status', async (req: express.Request, res: express
     }
 
     const job = jobs[0];
-    const newStatus = !job.is_active;
+    const newStatus = job.is_active ? 0 : 1;
 
     // Update job status
     await dbManager.execute(
@@ -596,14 +598,103 @@ router.post('/jobs/:id/toggle-status', async (req: express.Request, res: express
 
     res.json({
       success: true,
-      message: `Job status updated to ${newStatus ? 'active' : 'inactive'}`,
+      message: `Job status updated to ${newStatus === 1 ? 'active' : 'inactive'}`,
       data: {
         jobId: id,
-        isActive: newStatus
+        isActive: newStatus === 1
       }
     });
   } catch (error) {
     console.error('Toggle job status error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+});
+
+// Get all applications (admin only)
+router.get('/applications', async (req: express.Request, res: express.Response): Promise<void> => {
+  try {
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 20;
+    const search = req.query.search as string || '';
+    const status = req.query.status as string || 'all';
+    const jobId = req.query.job_id as string || '';
+
+    const offset = (page - 1) * limit;
+
+    // Build WHERE clause
+    let whereConditions = [];
+    let queryParams = [];
+
+    if (search) {
+      whereConditions.push('(j.title LIKE ? OR j.company LIKE ? OR u.name LIKE ? OR u.email LIKE ?)');
+      queryParams.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
+    }
+
+    if (status !== 'all') {
+      whereConditions.push('ja.status = ?');
+      queryParams.push(status);
+    }
+
+    if (jobId) {
+      whereConditions.push('ja.job_id = ?');
+      queryParams.push(jobId);
+    }
+
+    const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
+
+    // Get total count
+    const [countResult] = await dbManager.query(`
+      SELECT COUNT(*) as total 
+      FROM job_applications ja
+      JOIN jobs j ON ja.job_id = j.id
+      JOIN users u ON ja.user_id = u.id
+      ${whereClause}
+    `, queryParams);
+
+    // Get applications with job and user details
+    const applications = await dbManager.query(`
+      SELECT 
+        ja.*,
+        j.title as job_title,
+        j.company,
+        j.location,
+        j.job_type,
+        j.work_style,
+        u.name as applicant_name,
+        u.email as applicant_email,
+        up.phone as applicant_phone,
+        up.resume_url as applicant_resume_url,
+        emp.name as employer_name
+      FROM job_applications ja
+      JOIN jobs j ON ja.job_id = j.id
+      JOIN users u ON ja.user_id = u.id
+      LEFT JOIN user_profiles up ON ja.user_id = up.user_id
+      LEFT JOIN users emp ON j.created_by = emp.id
+      ${whereClause}
+      ORDER BY ja.applied_at DESC
+      LIMIT ? OFFSET ?
+    `, [...queryParams, limit, offset]);
+
+    const totalPages = Math.ceil(countResult.total / limit);
+
+    res.json({
+      success: true,
+      message: 'Applications retrieved successfully',
+      data: {
+        applications,
+        pagination: {
+          currentPage: page,
+          totalPages,
+          totalApplications: countResult.total,
+          limit
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Admin applications error:', error);
     res.status(500).json({
       success: false,
       message: 'Internal server error'

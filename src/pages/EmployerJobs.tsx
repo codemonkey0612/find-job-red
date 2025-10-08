@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Eye, Edit, Trash2, Loader2, Clock, CheckCircle, XCircle } from 'lucide-react';
+import { Plus, Eye, Edit, Trash2, Loader2, Clock, CheckCircle, XCircle, Users } from 'lucide-react';
 
 interface Job {
   id: number;
@@ -22,6 +22,7 @@ interface Job {
   is_active: boolean;
   created_at: string;
   rejection_reason?: string;
+  application_count: number;
 }
 
 const EmployerJobs: React.FC = () => {
@@ -133,6 +134,15 @@ const EmployerJobs: React.FC = () => {
                     <Button
                       size="sm"
                       variant="outline"
+                      onClick={() => navigate(`/employer/jobs/${job.id}/applications`)}
+                      className="flex items-center gap-1"
+                    >
+                      <Users className="h-4 w-4" />
+                      <span className="text-xs">応募者 ({job.application_count || 0})</span>
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
                       onClick={() => navigate(`/jobs/${job.id}`)}
                     >
                       <Eye className="h-4 w-4" />
@@ -141,7 +151,7 @@ const EmployerJobs: React.FC = () => {
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
                   <div>
                     <p className="text-sm text-gray-500">雇用形態</p>
                     <p className="font-medium">{jobTypeLabels[job.job_type]}</p>
@@ -156,6 +166,13 @@ const EmployerJobs: React.FC = () => {
                       {job.salary_min && job.salary_max
                         ? `¥${job.salary_min.toLocaleString()} - ¥${job.salary_max.toLocaleString()}`
                         : '応相談'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">応募数</p>
+                    <p className="font-medium flex items-center gap-1">
+                      <Users className="h-4 w-4 text-blue-600" />
+                      {job.application_count || 0} 件
                     </p>
                   </div>
                 </div>

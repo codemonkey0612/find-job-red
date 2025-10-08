@@ -229,6 +229,95 @@ router.get('/', optionalAuth, [
   }
 });
 
+// Get user's applications (must be before /:id route)
+router.get('/my-applications', authenticateToken, async (req: express.Request, res: express.Response) => {
+  const authReq = req as AuthRequest;
+  try {
+    const db = dbManager.getDb();
+
+    const applications = await db.prepare(`
+      SELECT ja.*, j.title, j.company, j.location, j.job_type, j.work_style, j.salary_min, j.salary_max
+      FROM job_applications ja
+      JOIN jobs j ON ja.job_id = j.id
+      WHERE ja.user_id = ?
+      ORDER BY ja.applied_at DESC
+    `).all(authReq.user!.id);
+
+    console.log('My applications query - User ID:', authReq.user!.id);
+    console.log('Applications count:', applications?.length);
+    console.log('First application:', applications?.[0]);
+
+    res.json({
+      success: true,
+      data: { applications }
+    });
+  } catch (error) {
+    console.error('Get applications error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+});
+
+// Get employer's own jobs (must be before /:id route)
+router.get('/my-jobs', authenticateToken, requireRole(['employer', 'admin']), async (req: express.Request, res: express.Response): Promise<void> => {
+  const authReq = req as AuthRequest;
+  try {
+    const db = dbManager.getDb();
+
+    const jobs = await db.prepare(`
+      SELECT 
+        j.*,
+        COUNT(ja.id) as application_count
+      FROM jobs j
+      LEFT JOIN job_applications ja ON j.id = ja.job_id
+      WHERE j.created_by = ?
+      GROUP BY j.id
+      ORDER BY j.created_at DESC
+    `).all(authReq.user!.id) as Job[];
+
+    res.status(200).json({
+      success: true,
+      message: 'Jobs retrieved successfully',
+      data: { jobs }
+    });
+  } catch (error) {
+    console.error('Get my jobs error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+});
+
+// Get pending jobs for approval (must be before /:id route)
+router.get('/pending/list', authenticateToken, requireRole(['admin']), async (req: express.Request, res: express.Response): Promise<void> => {
+  try {
+    const db = dbManager.getDb();
+
+    const jobs = await db.prepare(`
+      SELECT j.*, u.name as employer_name, u.email as employer_email
+      FROM jobs j
+      JOIN users u ON j.created_by = u.id
+      WHERE j.approval_status = 'pending'
+      ORDER BY j.created_at DESC
+    `).all() as Job[];
+
+    res.status(200).json({
+      success: true,
+      message: 'Pending jobs retrieved successfully',
+      data: { jobs, count: jobs.length }
+    });
+  } catch (error) {
+    console.error('Get pending jobs error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+});
+
 // Get single job by ID
 router.get('/:id', optionalAuth, async (req: express.Request, res: express.Response): Promise<void> => {
   try {
@@ -430,7 +519,7 @@ router.post('/:id/approve', authenticateToken, requireRole(['admin']), async (re
     await db.prepare(`
       UPDATE jobs 
       SET approval_status = 'approved', 
-          is_active = true,
+          is_active = 1,
           approved_by = ?,
           approved_at = CURRENT_TIMESTAMP
       WHERE id = ?
@@ -507,7 +596,7 @@ router.post('/:id/reject', authenticateToken, requireRole(['admin']), [
     await db.prepare(`
       UPDATE jobs 
       SET approval_status = 'rejected',
-          is_active = false,
+          is_active = 0,
           approved_by = ?,
           approved_at = CURRENT_TIMESTAMP,
           rejection_reason = ?
@@ -535,59 +624,6 @@ router.post('/:id/reject', authenticateToken, requireRole(['admin']), [
     });
   } catch (error) {
     console.error('Reject job error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Internal server error'
-    });
-  }
-});
-
-// Get employer's own jobs (employer and admin only)
-router.get('/my-jobs', authenticateToken, requireRole(['employer', 'admin']), async (req: express.Request, res: express.Response): Promise<void> => {
-  const authReq = req as AuthRequest;
-  try {
-    const db = dbManager.getDb();
-
-    const jobs = await db.prepare(`
-      SELECT * FROM jobs
-      WHERE created_by = ?
-      ORDER BY created_at DESC
-    `).all(authReq.user!.id) as Job[];
-
-    res.status(200).json({
-      success: true,
-      message: 'Jobs retrieved successfully',
-      data: { jobs }
-    });
-  } catch (error) {
-    console.error('Get my jobs error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Internal server error'
-    });
-  }
-});
-
-// Get pending jobs for approval (admin only)
-router.get('/pending/list', authenticateToken, requireRole(['admin']), async (req: express.Request, res: express.Response): Promise<void> => {
-  try {
-    const db = dbManager.getDb();
-
-    const jobs = await db.prepare(`
-      SELECT j.*, u.name as employer_name, u.email as employer_email
-      FROM jobs j
-      JOIN users u ON j.created_by = u.id
-      WHERE j.approval_status = 'pending'
-      ORDER BY j.created_at DESC
-    `).all() as Job[];
-
-    res.status(200).json({
-      success: true,
-      message: 'Pending jobs retrieved successfully',
-      data: { jobs, count: jobs.length }
-    });
-  } catch (error) {
-    console.error('Get pending jobs error:', error);
     res.status(500).json({
       success: false,
       message: 'Internal server error'
@@ -647,7 +683,11 @@ router.put('/:id', authenticateToken, requireRole(['admin']), [
     Object.keys(req.body).forEach(key => {
       if (req.body[key] !== undefined) {
         updateFields.push(`${key} = ?`);
-        updateValues.push(req.body[key]);
+        // Convert boolean values to 1/0 for MySQL
+        const value = typeof req.body[key] === 'boolean' 
+          ? (req.body[key] ? 1 : 0) 
+          : req.body[key];
+        updateValues.push(value);
       }
     });
 
@@ -667,7 +707,7 @@ router.put('/:id', authenticateToken, requireRole(['admin']), [
       WHERE id = ?
     `;
 
-    db.prepare(updateQuery).run(...updateValues);
+    await db.prepare(updateQuery).run(...updateValues);
 
     // Get updated job
     const updatedJob = await db.prepare('SELECT * FROM jobs WHERE id = ?').get(id) as Job;
@@ -694,7 +734,7 @@ router.delete('/:id', authenticateToken, requireRole(['admin']), async (req: exp
     const db = dbManager.getDb();
 
     // Check if job exists and user has permission
-    const existingJob =await db.prepare('SELECT * FROM jobs WHERE id = ?').get(id) as Job | undefined;
+    const existingJob = await db.prepare('SELECT * FROM jobs WHERE id = ?').get(id) as Job | undefined;
     if (!existingJob) {
       res.status(404).json({
         success: false,
@@ -711,7 +751,7 @@ router.delete('/:id', authenticateToken, requireRole(['admin']), async (req: exp
     }
 
     // Soft delete (set is_active to false)
-    db.prepare('UPDATE jobs SET is_active = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(id);
+    await db.prepare('UPDATE jobs SET is_active = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(id);
 
     res.json({
       success: true,
@@ -729,7 +769,7 @@ router.delete('/:id', authenticateToken, requireRole(['admin']), async (req: exp
 // Apply for a job
 router.post('/:id/apply', authenticateToken, [
   body('cover_letter').optional().trim(),
-  body('resume_url').optional().isURL().withMessage('Resume URL must be valid')
+  body('resume_url').optional({ nullable: true, checkFalsy: true }).isURL().withMessage('Resume URL must be valid')
 ], async (req: express.Request, res: express.Response): Promise<void> => {
   const authReq = req as AuthRequest;
   try {
@@ -740,6 +780,7 @@ router.post('/:id/apply', authenticateToken, [
         message: 'Validation failed',
         errors: errors.array()
       });
+      return;
     }
 
     const { id } = req.params;
@@ -753,6 +794,7 @@ router.post('/:id/apply', authenticateToken, [
         success: false,
         message: 'Job not found or no longer active'
       });
+      return;
     }
 
     // Check if user already applied
@@ -766,13 +808,14 @@ router.post('/:id/apply', authenticateToken, [
         success: false,
         message: 'You have already applied for this job'
       });
+      return;
     }
 
     // Create application
     const result = await db.prepare(`
       INSERT INTO job_applications (job_id, user_id, cover_letter, resume_url)
       VALUES (?, ?, ?, ?)
-    `).run(id, authReq.user!.id, cover_letter, resume_url);
+    `).run(id, authReq.user!.id, cover_letter || null, resume_url || null);
 
     res.status(201).json({
       success: true,
@@ -790,26 +833,133 @@ router.post('/:id/apply', authenticateToken, [
   }
 });
 
-// Get user's applications
-router.get('/my-applications', authenticateToken, async (req: express.Request, res: express.Response) => {
+// Get applications for a specific job (employer and admin only)
+router.get('/:id/applications', authenticateToken, async (req: express.Request, res: express.Response): Promise<void> => {
   const authReq = req as AuthRequest;
   try {
+    const { id } = req.params;
     const db = dbManager.getDb();
 
-    const applications = db.prepare(`
-      SELECT ja.*, j.title, j.company, j.location, j.job_type, j.work_style
+    // Check if job exists
+    const job = await db.prepare('SELECT * FROM jobs WHERE id = ?').get(id) as Job | undefined;
+    if (!job) {
+      res.status(404).json({
+        success: false,
+        message: 'Job not found'
+      });
+      return;
+    }
+
+    // Check if user is the job owner or admin
+    if (job.created_by !== authReq.user!.id && authReq.user!.role !== 'admin') {
+      res.status(403).json({
+        success: false,
+        message: 'You can only view applications for your own jobs'
+      });
+      return;
+    }
+
+    // Get applications with user information
+    const applications = await db.prepare(`
+      SELECT 
+        ja.*,
+        u.name as applicant_name,
+        u.email as applicant_email,
+        up.phone as applicant_phone,
+        up.resume_url as applicant_resume_url
       FROM job_applications ja
-      JOIN jobs j ON ja.job_id = j.id
-      WHERE ja.user_id = ?
+      JOIN users u ON ja.user_id = u.id
+      LEFT JOIN user_profiles up ON ja.user_id = up.user_id
+      WHERE ja.job_id = ?
       ORDER BY ja.applied_at DESC
-    `).all(authReq.user!.id);
+    `).all(id);
 
     res.json({
       success: true,
-      data: { applications }
+      data: { 
+        applications,
+        job: {
+          id: job.id,
+          title: job.title,
+          company: job.company
+        }
+      }
     });
   } catch (error) {
-    console.error('Get applications error:', error);
+    console.error('Get job applications error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+});
+
+// Update application status (employer and admin only)
+router.patch('/:jobId/applications/:applicationId', authenticateToken, [
+  body('status').isIn(['pending', 'reviewed', 'accepted', 'rejected']).withMessage('Invalid status')
+], async (req: express.Request, res: express.Response): Promise<void> => {
+  const authReq = req as AuthRequest;
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: errors.array()
+      });
+      return;
+    }
+
+    const { jobId, applicationId } = req.params;
+    const { status } = req.body;
+    const db = dbManager.getDb();
+
+    // Check if job exists
+    const job = await db.prepare('SELECT * FROM jobs WHERE id = ?').get(jobId) as Job | undefined;
+    if (!job) {
+      res.status(404).json({
+        success: false,
+        message: 'Job not found'
+      });
+      return;
+    }
+
+    // Check if user is the job owner or admin
+    if (job.created_by !== authReq.user!.id && authReq.user!.role !== 'admin') {
+      res.status(403).json({
+        success: false,
+        message: 'You can only update applications for your own jobs'
+      });
+      return;
+    }
+
+    // Check if application exists and belongs to this job
+    const application = await db.prepare('SELECT * FROM job_applications WHERE id = ? AND job_id = ?').get(applicationId, jobId);
+    if (!application) {
+      res.status(404).json({
+        success: false,
+        message: 'Application not found'
+      });
+      return;
+    }
+
+    // Update application status
+    await db.prepare(`
+      UPDATE job_applications 
+      SET status = ?, updated_at = CURRENT_TIMESTAMP 
+      WHERE id = ?
+    `).run(status, applicationId);
+
+    // Get updated application
+    const updatedApplication = await db.prepare('SELECT * FROM job_applications WHERE id = ?').get(applicationId);
+
+    res.json({
+      success: true,
+      message: 'Application status updated successfully',
+      data: { application: updatedApplication }
+    });
+  } catch (error) {
+    console.error('Update application status error:', error);
     res.status(500).json({
       success: false,
       message: 'Internal server error'
