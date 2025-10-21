@@ -3,7 +3,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
-import { User, Settings, LogOut, Briefcase, FileText } from "lucide-react";
+import { User, Settings, LogOut, Briefcase, FileText, CheckCircle } from "lucide-react";
 import logo from "@/assets/logo.jpg";
 
 export const Header = () => {
@@ -106,6 +106,10 @@ export const Header = () => {
                     <DropdownMenuItem onClick={() => navigate('/admin/jobs')}>
                       <Briefcase className="mr-2 h-4 w-4" />
                       <span>求人管理</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => navigate('/admin/jobs/approval')}>
+                      <CheckCircle className="mr-2 h-4 w-4" />
+                      <span>求人承認</span>
                     </DropdownMenuItem>
                   </>
                 )}

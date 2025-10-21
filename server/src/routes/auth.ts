@@ -2,13 +2,46 @@ import * as express from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import axios from 'axios';
+import multer from 'multer';
+import path from 'path';
 import { body, validationResult } from 'express-validator';
 import { authenticateToken } from '../middleware/auth.js';
 import type { AuthRequest } from '../middleware/auth.js';
 import { dbManager } from '../database/schema.js';
 import type { User } from '../database/schema.js';
+import { sendEmail } from '../config/email.js';
+import { passwordResetEmailTemplate, passwordResetEmailText } from '../templates/passwordResetEmail.js';
 
 const router = express.Router();
+
+// Multer configuration for avatar upload
+const avatarStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, 'uploads/avatars/');
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, 'avatar-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const avatarUpload = multer({
+  storage: avatarStorage,
+  limits: {
+    fileSize: 10 * 1024 * 1024 // 10MB limit
+  },
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = /jpeg|jpg|png|gif|webp/;
+    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+    const mimetype = allowedTypes.test(file.mimetype);
+
+    if (mimetype && extname) {
+      return cb(null, true);
+    } else {
+      cb(new Error('Only image files are allowed!'));
+    }
+  }
+});
 
 // Validation rules
 const registerValidation = [
@@ -318,6 +351,7 @@ router.get('/me', authenticateToken, async (req: express.Request, res: express.R
   try {
     const users = await dbManager.query(`
       SELECT u.id, u.email, u.name, u.role, u.email_verified, u.created_at,
+             u.auth_provider, u.provider_id, u.avatar_url,
              p.phone, p.address, p.bio, p.skills, p.experience_years, p.education, p.resume_url
       FROM users u
       LEFT JOIN user_profiles p ON u.id = p.user_id
@@ -336,6 +370,28 @@ router.get('/me', authenticateToken, async (req: express.Request, res: express.R
 
     // Parse skills JSON
     user.skills = JSON.parse(user.skills || '[]');
+
+    // Fetch user experiences
+    const experiences = await dbManager.query(`
+      SELECT id, title, company, location, start_date as startDate, 
+             end_date as endDate, is_current as isCurrent, description
+      FROM user_experiences
+      WHERE user_id = ?
+      ORDER BY start_date DESC
+    `, [authReq.user!.id]);
+    
+    user.experiences = experiences || [];
+
+    // Fetch user educations
+    const educations = await dbManager.query(`
+      SELECT id, degree, school, field, start_date as startDate, 
+             end_date as endDate, gpa
+      FROM user_educations
+      WHERE user_id = ?
+      ORDER BY start_date DESC
+    `, [authReq.user!.id]);
+    
+    user.educations = educations || [];
 
     res.json({
       success: true,
@@ -757,12 +813,23 @@ router.post('/linkedin', async (req: express.Request, res: express.Response): Pr
 // Update user profile
 router.put('/profile', authenticateToken, [
   body('name').optional().trim().isLength({ min: 2 }),
+  body('email').optional().isEmail().normalizeEmail(),
   body('phone').optional().trim(),
   body('address').optional().trim(),
   body('bio').optional().trim(),
   body('skills').optional().isArray(),
-  body('experience_years').optional().isInt({ min: 0 }),
-  body('education').optional().trim()
+  body('experience_years').optional().custom((value) => {
+    if (value === null || value === undefined || value === '') {
+      return true; // Allow null, undefined, or empty string
+    }
+    if (!Number.isInteger(Number(value)) || Number(value) < 0) {
+      throw new Error('Experience years must be a non-negative integer');
+    }
+    return true;
+  }),
+  body('education').optional().trim(),
+  body('experiences').optional().isArray(),
+  body('educations').optional().isArray()
 ], async (req: express.Request, res: express.Response): Promise<void> => {
   const authReq = req as AuthRequest;
   try {
@@ -776,7 +843,7 @@ router.put('/profile', authenticateToken, [
       return;
     }
 
-    const { name, phone, address, bio, skills, experience_years, education } = req.body;
+    const { name, email, phone, address, bio, skills, experience_years, education, experiences, educations } = req.body;
 
     // Update user basic info
     if (name) {
@@ -789,25 +856,112 @@ router.put('/profile', authenticateToken, [
     if (existingProfiles.length > 0) {
       await dbManager.execute(`
         UPDATE user_profiles
-        SET phone = COALESCE(?, phone),
-            address = COALESCE(?, address),
-            bio = COALESCE(?, bio),
-            skills = COALESCE(?, skills),
-            experience_years = COALESCE(?, experience_years),
-            education = COALESCE(?, education),
+        SET phone = ?,
+            address = ?,
+            bio = ?,
+            skills = ?,
+            experience_years = ?,
+            education = ?,
             updated_at = CURRENT_TIMESTAMP
         WHERE user_id = ?
-      `, [phone, address, bio, JSON.stringify(skills), experience_years, education, authReq.user!.id]);
+      `, [phone || null, address || null, bio || null, JSON.stringify(skills), experience_years || null, education || null, authReq.user!.id]);
     } else {
       await dbManager.execute(`
         INSERT INTO user_profiles (user_id, phone, address, bio, skills, experience_years, education)
         VALUES (?, ?, ?, ?, ?, ?, ?)
-      `, [authReq.user!.id, phone, address, bio, JSON.stringify(skills), experience_years, education]);
+      `, [authReq.user!.id, phone || null, address || null, bio || null, JSON.stringify(skills), experience_years || null, education || null]);
+    }
+
+    // Handle experiences
+    if (experiences && Array.isArray(experiences)) {
+      // Delete existing experiences
+      await dbManager.execute('DELETE FROM user_experiences WHERE user_id = ?', [authReq.user!.id]);
+      
+      // Insert new experiences
+      for (const exp of experiences) {
+        if (exp.title && exp.company && exp.startDate) {
+          await dbManager.execute(`
+            INSERT INTO user_experiences (user_id, title, company, location, start_date, end_date, is_current, description)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          `, [
+            authReq.user!.id,
+            exp.title,
+            exp.company,
+            exp.location || null,
+            exp.startDate,
+            exp.endDate || null,
+            exp.isCurrent || false,
+            exp.description || null
+          ]);
+        }
+      }
+    }
+
+    // Handle educations
+    if (educations && Array.isArray(educations)) {
+      // Delete existing educations
+      await dbManager.execute('DELETE FROM user_educations WHERE user_id = ?', [authReq.user!.id]);
+      
+      // Insert new educations
+      for (const edu of educations) {
+        if (edu.degree && edu.school && edu.field && edu.startDate && edu.endDate) {
+          await dbManager.execute(`
+            INSERT INTO user_educations (user_id, degree, school, field, start_date, end_date, gpa)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+          `, [
+            authReq.user!.id,
+            edu.degree,
+            edu.school,
+            edu.field,
+            edu.startDate,
+            edu.endDate,
+            edu.gpa || null
+          ]);
+        }
+      }
+    }
+
+    // Fetch updated user profile
+    const updatedUsers = await dbManager.query(`
+      SELECT u.id, u.email, u.name, u.role, u.email_verified, u.created_at,
+             u.auth_provider, u.provider_id, u.avatar_url,
+             p.phone, p.address, p.bio, p.skills, p.experience_years, p.education, p.resume_url
+      FROM users u
+      LEFT JOIN user_profiles p ON u.id = p.user_id
+      WHERE u.id = ?
+    `, [authReq.user!.id]);
+
+    const updatedUser = updatedUsers[0] as any;
+    if (updatedUser) {
+      updatedUser.skills = JSON.parse(updatedUser.skills || '[]');
+      
+      // Fetch experiences
+      const userExperiences = await dbManager.query(`
+        SELECT id, title, company, location, start_date as startDate, 
+               end_date as endDate, is_current as isCurrent, description
+        FROM user_experiences
+        WHERE user_id = ?
+        ORDER BY start_date DESC
+      `, [authReq.user!.id]);
+      updatedUser.experiences = userExperiences || [];
+
+      // Fetch educations
+      const userEducations = await dbManager.query(`
+        SELECT id, degree, school, field, start_date as startDate, 
+               end_date as endDate, gpa
+        FROM user_educations
+        WHERE user_id = ?
+        ORDER BY start_date DESC
+      `, [authReq.user!.id]);
+      updatedUser.educations = userEducations || [];
     }
 
     res.json({
       success: true,
-      message: 'Profile updated successfully'
+      message: 'Profile updated successfully',
+      data: {
+        user: updatedUser
+      }
     });
   } catch (error) {
     console.error('Update profile error:', error);
@@ -1224,6 +1378,8 @@ router.post('/forgot-password', [
 
     // Store token in database
     const expiresAt = new Date(Date.now() + 3600000); // 1 hour from now
+    // Format datetime for MySQL: YYYY-MM-DD HH:MM:SS
+    const mysqlDateTime = expiresAt.toISOString().slice(0, 19).replace('T', ' ');
     
     // Delete any existing tokens for this user
     await dbManager.execute('DELETE FROM password_reset_tokens WHERE user_id = ?', [user.id]);
@@ -1231,17 +1387,41 @@ router.post('/forgot-password', [
     // Insert new token
     await dbManager.execute(
       'INSERT INTO password_reset_tokens (user_id, token, expires_at) VALUES (?, ?, ?)',
-      [user.id, resetToken, expiresAt.toISOString()]
+      [user.id, resetToken, mysqlDateTime]
     );
 
-    // In a real application, send email here
-    // For now, we'll just log the reset link
-    console.log(`Password reset link for ${email}: http://localhost:5173/reset-password?token=${resetToken}`);
+    // Generate password reset link
+    const frontendUrl = process.env.FRONTEND_URL || 'https://bizresearch.biz';
+    const resetLink = `${frontendUrl}/reset-password?token=${resetToken}`;
+    
+    // Send password reset email
+    try {
+      await sendEmail({
+        to: email,
+        subject: 'パスワードリセットのご案内 - BizResearch',
+        html: passwordResetEmailTemplate({
+          name: user.name || 'ユーザー',
+          resetLink: resetLink,
+          expiresIn: '1時間'
+        }),
+        text: passwordResetEmailText({
+          name: user.name || 'ユーザー',
+          resetLink: resetLink,
+          expiresIn: '1時間'
+        })
+      });
+      
+      console.log(`✅ Password reset email sent to: ${email}`);
+    } catch (emailError) {
+      console.error('❌ Failed to send password reset email:', emailError);
+      // Log the reset link as fallback
+      console.log(`📧 Fallback - Password reset link for ${email}: ${resetLink}`);
+    }
 
     res.json({
       success: true,
       message: 'パスワードリセットの手順をメールで送信しました。メールをご確認ください。',
-      // Remove this in production! Only for development
+      // Include reset link in development mode for testing
       data: process.env.NODE_ENV === 'development' ? { resetToken, resetLink: `/reset-password?token=${resetToken}` } : undefined
     });
   } catch (error) {
@@ -1308,9 +1488,11 @@ router.post('/reset-password', [
     }
 
     // Check if token exists in database and is not expired
+    // Format current datetime for MySQL: YYYY-MM-DD HH:MM:SS
+    const currentDateTime = new Date().toISOString().slice(0, 19).replace('T', ' ');
     const tokens = await dbManager.query(
       'SELECT * FROM password_reset_tokens WHERE token = ? AND expires_at > ?',
-      [token, new Date().toISOString()]
+      [token, currentDateTime]
     );
 
     if (tokens.length === 0) {
@@ -1328,7 +1510,7 @@ router.post('/reset-password', [
 
     // Update user password
     await dbManager.execute(
-      'UPDATE users SET password = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      'UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
       [hashedPassword, resetToken.user_id]
     );
 
@@ -1347,6 +1529,109 @@ router.post('/reset-password', [
     res.status(500).json({
       success: false,
       message: 'Internal server error'
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/auth/upload-avatar:
+ *   post:
+ *     summary: Upload user avatar image
+ *     tags: [Authentication]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - avatar
+ *             properties:
+ *               avatar:
+ *                 type: string
+ *                 format: binary
+ *                 description: Avatar image file
+ *     responses:
+ *       200:
+ *         description: Avatar uploaded successfully
+ *       400:
+ *         description: Invalid file or validation failed
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Internal server error
+ */
+router.post('/upload-avatar', authenticateToken, (req: express.Request, res: express.Response, next: express.NextFunction): void => {
+  avatarUpload.single('avatar')(req, res, (err: any) => {
+    if (err) {
+      console.error('Multer error:', err);
+      if (err instanceof multer.MulterError) {
+        if (err.code === 'LIMIT_FILE_SIZE') {
+          res.status(400).json({
+            success: false,
+            message: 'File too large. Maximum size is 10MB'
+          });
+          return;
+        }
+        res.status(400).json({
+          success: false,
+          message: `Upload error: ${err.message}`
+        });
+        return;
+      }
+      res.status(400).json({
+        success: false,
+        message: err.message || 'File upload failed'
+      });
+      return;
+    }
+    next();
+  });
+}, async (req: express.Request, res: express.Response): Promise<void> => {
+  const authReq = req as AuthRequest;
+  try {
+    console.log('Upload request received');
+    console.log('File:', req.file);
+    console.log('Body:', req.body);
+    console.log('Headers:', req.headers);
+    
+    if (!req.file) {
+      console.error('No file in request');
+      res.status(400).json({
+        success: false,
+        message: 'No file uploaded. Please select an image file.'
+      });
+      return;
+    }
+
+    // Generate avatar URL (relative path from server root)
+    const avatarUrl = `/uploads/avatars/${req.file.filename}`;
+    
+    console.log('Updating database with avatar URL:', avatarUrl);
+
+    // Update user's avatar_url in database
+    await dbManager.execute(
+      'UPDATE users SET avatar_url = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      [avatarUrl, authReq.user!.id]
+    );
+
+    console.log('Avatar uploaded successfully for user:', authReq.user!.id);
+
+    res.json({
+      success: true,
+      message: 'Avatar uploaded successfully',
+      data: {
+        avatar_url: avatarUrl
+      }
+    });
+  } catch (error) {
+    console.error('Upload avatar error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to upload avatar'
     });
   }
 });

@@ -33,6 +33,35 @@ const API_BASE_URL = getApiBaseUrl();
 
 console.log('🔗 API Base URL:', API_BASE_URL);
 
+// Helper function to get full URL for uploaded files
+export const getFileUrl = (relativePath: string | null | undefined): string | null => {
+  if (!relativePath) return null;
+  
+  // If already a full URL, return as is
+  if (relativePath.startsWith('http://') || relativePath.startsWith('https://')) {
+    return relativePath;
+  }
+  
+  // For production on bizresearch.biz
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname;
+    if (hostname === 'bizresearch.biz' || hostname.includes('bizresearch')) {
+      return relativePath; // Use relative path on same domain
+    }
+    
+    // For localhost, construct full URL
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      return `http://localhost:3001${relativePath}`;
+    }
+    
+    // Default: use same protocol with port 3001
+    const protocol = window.location.protocol;
+    return `${protocol}//${hostname}:3001${relativePath}`;
+  }
+  
+  return relativePath;
+};
+
 // Create axios instance
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -116,14 +145,38 @@ export interface RegisterRequest {
   role?: 'user' | 'employer';
 }
 
+export interface Experience {
+  id?: number;
+  title: string;
+  company: string;
+  location: string;
+  startDate: string;
+  endDate: string | null;
+  description: string;
+  isCurrent: boolean;
+}
+
+export interface Education {
+  id?: number;
+  degree: string;
+  school: string;
+  field: string;
+  startDate: string;
+  endDate: string;
+  gpa?: string;
+}
+
 export interface UpdateProfileRequest {
   name?: string;
+  email?: string;
   phone?: string;
   address?: string;
   bio?: string;
   skills?: string[];
   experience_years?: number;
   education?: string;
+  experiences?: Experience[];
+  educations?: Education[];
 }
 
 export interface ChangePasswordRequest {
@@ -149,6 +202,9 @@ export interface User {
   auth_provider?: 'local' | 'google' | 'linkedin';
   provider_id?: string;
   avatar_url?: string;
+  // Detailed profile data
+  experiences?: Experience[];
+  educations?: Education[];
 }
 
 export interface Job {
@@ -211,10 +267,44 @@ export const authApi = {
       ? api.get('/auth/me', { headers: { Authorization: `Bearer ${token}` } })
       : api.get('/auth/me'),
 
-  updateProfile: (profileData: UpdateProfileRequest, token?: string): Promise<AxiosResponse<ApiResponse>> =>
+  updateProfile: (profileData: UpdateProfileRequest, token?: string): Promise<AxiosResponse<ApiResponse<{ user: User }>>> =>
     token 
       ? api.put('/auth/profile', profileData, { headers: { Authorization: `Bearer ${token}` } })
       : api.put('/auth/profile', profileData),
+
+  // Complete profile update with avatar
+  updateCompleteProfile: async (
+    profileData: UpdateProfileRequest, 
+    avatarFile?: File | null, 
+    token?: string
+  ): Promise<AxiosResponse<ApiResponse<{ user: User }>>> => {
+    // Upload avatar first if provided
+    if (avatarFile) {
+      const formData = new FormData();
+      formData.append('avatar', avatarFile);
+      
+      const uploadApi = axios.create({
+        baseURL: API_BASE_URL,
+        headers: {}
+      });
+      
+      await (token 
+        ? uploadApi.post('/auth/upload-avatar', formData, { 
+            headers: { 'Authorization': `Bearer ${token}` },
+            maxContentLength: Infinity,
+            maxBodyLength: Infinity
+          })
+        : uploadApi.post('/auth/upload-avatar', formData, {
+            maxContentLength: Infinity,
+            maxBodyLength: Infinity
+          }));
+    }
+    
+    // Then update profile data
+    return token 
+      ? api.put('/auth/profile', profileData, { headers: { Authorization: `Bearer ${token}` } })
+      : api.put('/auth/profile', profileData);
+  },
 
   changePassword: (passwordData: ChangePasswordRequest, token?: string): Promise<AxiosResponse<ApiResponse>> =>
     token 
@@ -237,6 +327,33 @@ export const authApi = {
 
   linkedinLogin: (accessToken: string): Promise<AxiosResponse<ApiResponse<{ user: User; token: string }>>> =>
     api.post('/auth/linkedin', { accessToken }),
+
+  // Upload avatar image
+  uploadAvatar: (file: File, token?: string): Promise<AxiosResponse<ApiResponse<{ avatar_url: string }>>> => {
+    const formData = new FormData();
+    formData.append('avatar', file);
+    
+    // Create a separate axios instance for file uploads to avoid Content-Type conflicts
+    const uploadApi = axios.create({
+      baseURL: API_BASE_URL,
+      headers: {
+        // Don't set Content-Type - let axios set it automatically for FormData
+      }
+    });
+    
+    return token 
+      ? uploadApi.post('/auth/upload-avatar', formData, { 
+          headers: { 
+            'Authorization': `Bearer ${token}`
+          },
+          maxContentLength: Infinity,
+          maxBodyLength: Infinity
+        })
+      : uploadApi.post('/auth/upload-avatar', formData, {
+          maxContentLength: Infinity,
+          maxBodyLength: Infinity
+        });
+  },
 
   // Utility methods
   isAuthenticated: (): boolean => {

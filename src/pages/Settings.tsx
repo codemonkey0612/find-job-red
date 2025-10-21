@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -25,21 +26,48 @@ import {
 } from 'lucide-react';
 
 const Settings: React.FC = () => {
+  const { user, updateProfile, changePassword } = useAuth();
   const [activeTab, setActiveTab] = useState('account');
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
 
-  // Account settings
+  // Account settings - Initialize from user data
   const [accountData, setAccountData] = useState({
-    firstName: '太郎',
-    lastName: '田中',
-    email: 'tanaka@example.com',
-    phone: '090-1234-5678',
-    location: '東京都渋谷区',
+    firstName: '',
+    lastName: '',
+    email: '',
+    phone: '',
+    location: '',
     timezone: 'Asia/Tokyo',
     language: 'ja'
   });
+
+  // Password change data
+  const [passwordData, setPasswordData] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: ''
+  });
+
+  // Load user data on mount
+  useEffect(() => {
+    if (user) {
+      const nameParts = user.name?.split(' ') || ['', ''];
+      setAccountData({
+        firstName: nameParts[1] || '',
+        lastName: nameParts[0] || '',
+        email: user.email || '',
+        phone: user.phone || '',
+        location: user.address || '',
+        timezone: 'Asia/Tokyo',
+        language: 'ja'
+      });
+    }
+  }, [user]);
 
   // Notification settings
   const [notifications, setNotifications] = useState({
@@ -71,29 +99,81 @@ const Settings: React.FC = () => {
     sidebarCollapsed: false
   });
 
-  const handleSaveAccount = () => {
-    // Implement save account data
-    console.log('Saving account data:', accountData);
+  const handleSaveAccount = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      setSuccess(null);
+
+      // Combine first and last name
+      const fullName = `${accountData.lastName} ${accountData.firstName}`.trim();
+
+      await updateProfile({
+        name: fullName,
+        email: accountData.email,
+        phone: accountData.phone,
+        address: accountData.location,
+      });
+
+      setSuccess('アカウント情報を更新しました');
+    } catch (err: any) {
+      setError(err.message || 'アカウント情報の更新に失敗しました');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSaveNotifications = () => {
     // Implement save notification settings
     console.log('Saving notification settings:', notifications);
+    setSuccess('通知設定を保存しました');
   };
 
   const handleSavePrivacy = () => {
     // Implement save privacy settings
     console.log('Saving privacy settings:', privacy);
+    setSuccess('プライバシー設定を保存しました');
   };
 
   const handleSaveAppearance = () => {
     // Implement save appearance settings
     console.log('Saving appearance settings:', appearance);
+    setSuccess('外観設定を保存しました');
   };
 
-  const handleChangePassword = () => {
-    // Implement change password
-    console.log('Changing password');
+  const handleChangePassword = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      setSuccess(null);
+
+      // Validate passwords
+      if (passwordData.newPassword !== passwordData.confirmPassword) {
+        setError('新しいパスワードが一致しません');
+        return;
+      }
+
+      if (passwordData.newPassword.length < 6) {
+        setError('パスワードは6文字以上で入力してください');
+        return;
+      }
+
+      await changePassword({
+        currentPassword: passwordData.currentPassword,
+        newPassword: passwordData.newPassword,
+      });
+
+      setSuccess('パスワードを変更しました');
+      setPasswordData({
+        currentPassword: '',
+        newPassword: '',
+        confirmPassword: ''
+      });
+    } catch (err: any) {
+      setError(err.message || 'パスワードの変更に失敗しました');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleDeleteAccount = () => {
@@ -106,12 +186,35 @@ const Settings: React.FC = () => {
     console.log('Exporting data');
   };
 
+  // Show loading state if user is not loaded yet
+  if (!user) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <div className="flex items-center justify-center h-64">
+          <div className="text-lg">読み込み中...</div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900 mb-2">設定</h1>
         <p className="text-gray-600">アカウント設定と環境設定を管理しましょう</p>
       </div>
+
+      {/* Error/Success Messages */}
+      {error && (
+        <div className="mb-4 p-4 bg-red-50 border border-red-200 text-red-700 rounded-md">
+          {error}
+        </div>
+      )}
+      {success && (
+        <div className="mb-4 p-4 bg-green-50 border border-green-200 text-green-700 rounded-md">
+          {success}
+        </div>
+      )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="grid w-full grid-cols-4">
@@ -186,9 +289,9 @@ const Settings: React.FC = () => {
                   </select>
                 </div>
               </div>
-              <Button onClick={handleSaveAccount}>
+              <Button onClick={handleSaveAccount} disabled={loading}>
                 <Save className="h-4 w-4 mr-2" />
-                変更を保存
+                {loading ? '保存中...' : '変更を保存'}
               </Button>
             </CardContent>
           </Card>
@@ -207,6 +310,8 @@ const Settings: React.FC = () => {
                       id="currentPassword"
                       type={showCurrentPassword ? "text" : "password"}
                       placeholder="現在のパスワードを入力"
+                      value={passwordData.currentPassword}
+                      onChange={(e) => setPasswordData({...passwordData, currentPassword: e.target.value})}
                     />
                     <Button
                       type="button"
@@ -226,6 +331,8 @@ const Settings: React.FC = () => {
                       id="newPassword"
                       type={showNewPassword ? "text" : "password"}
                       placeholder="新しいパスワードを入力"
+                      value={passwordData.newPassword}
+                      onChange={(e) => setPasswordData({...passwordData, newPassword: e.target.value})}
                     />
                     <Button
                       type="button"
@@ -245,6 +352,8 @@ const Settings: React.FC = () => {
                       id="confirmPassword"
                       type={showConfirmPassword ? "text" : "password"}
                       placeholder="新しいパスワードを再入力"
+                      value={passwordData.confirmPassword}
+                      onChange={(e) => setPasswordData({...passwordData, confirmPassword: e.target.value})}
                     />
                     <Button
                       type="button"
@@ -258,9 +367,9 @@ const Settings: React.FC = () => {
                   </div>
                 </div>
               </div>
-              <Button onClick={handleChangePassword}>
+              <Button onClick={handleChangePassword} disabled={loading}>
                 <Lock className="h-4 w-4 mr-2" />
-                パスワードを変更
+                {loading ? '変更中...' : 'パスワードを変更'}
               </Button>
             </CardContent>
           </Card>
