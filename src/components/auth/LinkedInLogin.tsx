@@ -5,7 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { authApi } from '@/lib/api';
 
 interface LinkedInLoginProps {
-  onSuccess?: () => void;
+  onSuccess: () => void;
 }
 
 declare global {
@@ -52,7 +52,7 @@ export const LinkedInLogin: React.FC<LinkedInLoginProps> = ({ onSuccess }) => {
       localStorage.setItem('auth_token', token);
       localStorage.setItem('user', JSON.stringify(user));
       
-      onSuccess?.();
+      onSuccess();
     } catch (error) {
       console.error('LinkedIn callback error:', error);
     } finally {

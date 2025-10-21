@@ -146,9 +146,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       await authApi.updateProfile(profileData);
       
-      // Update local user state
-      if (user) {
-        const updatedUser = { ...user, ...profileData };
+      // Refresh user data from server to get latest profile
+      if (token) {
+        const response = await authApi.getProfile(token);
+        const updatedUser = response.data.data.user;
         setUser(updatedUser);
         localStorage.setItem('user', JSON.stringify(updatedUser));
       }

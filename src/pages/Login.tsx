@@ -1,15 +1,9 @@
 import React, { useState } from 'react';
 import { LoginForm } from '@/components/auth/LoginForm';
 import { RegisterForm } from '@/components/auth/RegisterForm';
-import { useNavigate } from 'react-router-dom';
 
 const Login: React.FC = () => {
   const [isLogin, setIsLogin] = useState(true);
-  const navigate = useNavigate();
-
-  const handleSuccess = () => {
-    navigate('/');
-  };
 
   const handleSwitchToRegister = () => {
     setIsLogin(false);
@@ -24,12 +18,10 @@ const Login: React.FC = () => {
       <div className="max-w-md w-full space-y-8">
         {isLogin ? (
           <LoginForm 
-            onSuccess={handleSuccess}
             onSwitchToRegister={handleSwitchToRegister}
           />
         ) : (
           <RegisterForm 
-            onSuccess={handleSuccess}
             onSwitchToLogin={handleSwitchToLogin}
           />
         )}

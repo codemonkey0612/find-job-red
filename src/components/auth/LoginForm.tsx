@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -20,14 +21,15 @@ const loginSchema = z.object({
 type LoginFormData = z.infer<typeof loginSchema>;
 
 interface LoginFormProps {
-  onSuccess?: () => void;
   onSwitchToRegister?: () => void;
 }
 
-export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess, onSwitchToRegister }) => {
+export const LoginForm: React.FC<LoginFormProps> = ({ onSwitchToRegister }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   
   const { login } = useAuth();
 
@@ -44,7 +46,10 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess, onSwitchToRegis
       setLoading(true);
       setError(null);
       await login(data.email, data.password);
-      onSuccess?.();
+      
+      // Get redirect URL from query params, default to '/'
+      const redirect = searchParams.get('redirect') || searchParams.get('returnUrl') || '/';
+      navigate(redirect);
     } catch (err: any) {
       setError(err.message || 'Login failed');
     } finally {
@@ -53,7 +58,9 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess, onSwitchToRegis
   };
 
   const handleSocialLoginSuccess = () => {
-    onSuccess?.();
+    // Get redirect URL from query params, default to '/'
+    const redirect = searchParams.get('redirect') || searchParams.get('returnUrl') || '/';
+    navigate(redirect);
   };
 
   return (

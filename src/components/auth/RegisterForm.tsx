@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -27,15 +28,16 @@ const registerSchema = z.object({
 type RegisterFormData = z.infer<typeof registerSchema>;
 
 interface RegisterFormProps {
-  onSuccess?: () => void;
   onSwitchToLogin?: () => void;
 }
 
-export const RegisterForm: React.FC<RegisterFormProps> = ({ onSuccess, onSwitchToLogin }) => {
+export const RegisterForm: React.FC<RegisterFormProps> = ({ onSwitchToLogin }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   
   const { register: registerUser } = useAuth();
 
@@ -64,7 +66,10 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({ onSuccess, onSwitchT
         password: data.password,
         role: data.role,
       });
-      onSuccess?.();
+      
+      // Get redirect URL from query params, default to '/'
+      const redirect = searchParams.get('redirect') || searchParams.get('returnUrl') || '/';
+      navigate(redirect);
     } catch (err: any) {
       setError(err.message || 'Registration failed');
     } finally {
@@ -73,7 +78,9 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({ onSuccess, onSwitchT
   };
 
   const handleSocialLoginSuccess = () => {
-    onSuccess?.();
+    // Get redirect URL from query params, default to '/'
+    const redirect = searchParams.get('redirect') || searchParams.get('returnUrl') || '/';
+    navigate(redirect);
   };
 
   return (

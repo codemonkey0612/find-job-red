@@ -5,7 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { authApi } from '@/lib/api';
 
 interface GoogleLoginProps {
-  onSuccess?: () => void;
+  onSuccess: () => void;
 }
 
 declare global {
@@ -56,7 +56,7 @@ export const GoogleLogin: React.FC<GoogleLoginProps> = ({ onSuccess }) => {
             // Set auth data in context
             setAuthData(user, token);
             
-            onSuccess?.();
+            onSuccess();
           } catch (error: any) {
             console.error('Google login backend error:', error);
             const errorMessage = error.response?.data?.message || error.message || 'Google login failed';
